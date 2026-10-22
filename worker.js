@@ -1,14 +1,20 @@
 // organisedmess.studio — tiny Worker in front of the static assets.
-// Workers Static Assets can't do a 200 rewrite from _redirects, so the
-// Capabilities deep link is served here; everything else passes straight through.
+// Serves the Capabilities deep link (the page, not a redirect) and marks the
+// workers.dev staging host noindex. Everything else passes straight through.
 export default {
 	async fetch(request, env) {
 		const url = new URL(request.url);
+		let res;
 		if (/^\/capabilities\/?$/.test(url.pathname)) {
 			url.pathname = '/';
-			const res = await env.ASSETS.fetch(new Request(url.toString(), request));
-			return new Response(res.body, res);
+			res = await env.ASSETS.fetch(new Request(url.toString(), request));
+		} else {
+			res = await env.ASSETS.fetch(request);
 		}
-		return env.ASSETS.fetch(request);
+		if (url.hostname.endsWith('.workers.dev')) {
+			res = new Response(res.body, res);
+			res.headers.set('X-Robots-Tag', 'noindex, nofollow');
+		}
+		return res;
 	}
 };

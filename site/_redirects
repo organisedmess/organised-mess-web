@@ -1,3 +1,4 @@
-# Cloudflare Pages: serve the single page for the overlay route (200 rewrite, URL stays /capabilities)
-/capabilities      /index.html   200
-/capabilities/     /index.html   200
+# Workers Static Assets: serve the single page for the overlay route (URL stays /capabilities).
+# The target is "/" — "/index.html" would be canonicalised to "/" with a 3xx.
+/capabilities      /   200
+/capabilities/     /   200

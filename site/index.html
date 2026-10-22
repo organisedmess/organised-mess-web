@@ -25,15 +25,17 @@
 	<link rel="stylesheet" href="/css/site.css">
 	<script>
 	(function () {
+		document.documentElement.classList.add('js');
 		try {
 			var q = new URLSearchParams(location.search).get('lights');
+			if (q === 'off') { document.documentElement.classList.add('lights-off'); return; }
 			if (q === 'on' || sessionStorage.getItem('om-lights') === 'on') return;
 			var p = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Singapore', hour12: false, weekday: 'short', hour: '2-digit', minute: '2-digit' }).formatToParts(new Date());
 			var g = function (t) { for (var i = 0; i < p.length; i++) if (p[i].type === t) return p[i].value; return ''; };
 			var wd = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(g('weekday'));
 			var t = (parseInt(g('hour'), 10) % 24) + parseInt(g('minute'), 10) / 60;
 			var open = wd >= 1 && wd <= 5 && t >= 9 && t < 19;
-			if (q === 'off' || !open) document.documentElement.classList.add('lights-off');
+			if (!open) document.documentElement.classList.add('lights-off');
 		} catch (e) {}
 	})();
 	</script>
@@ -41,6 +43,7 @@
 	<script src="/js/site.js" defer></script>
 </head>
 <body class="home" data-nav="overlay" data-caps="window">
+<a class="skip-link" href="#main-index">Skip to content</a>
 
 <!-- ============ Header pills ============ -->
 <header class="bar bar-top" id="header">
@@ -48,7 +51,7 @@
 </header>
 
 <!-- ============ Home ============ -->
-<main id="main-index" class="page page-home">
+<main id="main-index" class="page page-home" tabindex="-1">
 	<div class="backdrop clip">
 		<div class="backdrop-contents">
 			<div data-backdrop="random"
@@ -77,7 +80,7 @@
 	</div>
 </main>
 
-<p class="lights-notice" role="status" hidden><span class="lights-line">The studio is closed right now,</span><span class="lights-line">come back later at <span class="lights-when"></span></span><span class="lights-line lights-cta">or <span class="lights-verb">click</span> anywhere to turn the lights on.</span></p>
+<p class="lights-notice" role="status" hidden><span class="lights-line lights-l1">The studio is closed right now,</span><span class="lights-line lights-l2">come back later at <span class="lights-when"></span></span><span class="lights-line lights-cta">or <span class="lights-verb" aria-hidden="true"></span><span class="sr-only">click or tap</span> anywhere to <span class="lights-action">turn the lights on</span>.</span></p>
 
 <div class="cursor" aria-hidden="true"></div>
 

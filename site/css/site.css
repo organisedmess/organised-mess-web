@@ -71,7 +71,7 @@
 	/* type scale — ratio ≈1.2, body = 1.2rem (≈15.5px on desktop) */
 	--t-xs: max(0.85rem, 10px);   /* copyright, numbers, readout */
 	--t-s: max(1rem, 12px);       /* strips */
-	--t-m: max(1.2rem, 13px);     /* body copy */
+	--t-m: max(1.2rem, 14px);     /* body copy */
 	--t-l: max(1.45rem, 16px);    /* row labels, subheads, back link */
 	--t-xl: 1.75rem;   /* hero link */
 	--t-xxl: 2.6rem;   /* hero */
@@ -98,8 +98,6 @@ html {
 	font-size: var(--base-size);
 	min-height: var(--viewport-height);
 	touch-action: manipulation;
-	-webkit-text-size-adjust: none;
-	text-size-adjust: none;
 }
 html.mobile {
 	font-size: calc(var(--base-size) * var(--mobile-scale));
@@ -300,7 +298,7 @@ a.pill:hover { background: rgba(255, 255, 255, 0.34); }
 	position: relative; z-index: 1;
 }
 .system-btn:hover, .system-btn[aria-expanded="true"] { background: rgba(255, 255, 255, 0.3); }
-.system-label { opacity: 0.6; }
+.system-label { opacity: 0.75; }
 .system-sep { opacity: 0.4; }
 .system-caret { font-size: 0.8em; opacity: 0.6; transition: transform 200ms var(--ease-out); }
 .system-btn[aria-expanded="true"] .system-caret { transform: rotate(180deg); }
@@ -355,6 +353,8 @@ a.pill:hover { background: rgba(255, 255, 255, 0.34); }
 
 /* mobile: one pill per side, rights hidden */
 .mobile .pill-rights { grid-column: 1 / -1; justify-self: start; }
+/* landscape phones: one footer row, so the hero's CTA clears it on first view */
+@media (orientation: landscape) and (max-height: 500px) { .mobile .pill-rights { display: none; } }
 .mobile .bar { font-size: max(0.85rem, 13px); }
 .mobile .pill { padding: 0 0.8em; }
 
@@ -694,7 +694,11 @@ html.lights-off .page-capabilities .page-content { box-shadow: 0 0 5rem 0 rgba(0
 .lights-notice[hidden] { display: none; }
 .lights-notice .lights-cta { font-family: var(--sans); font-weight: 300; font-size: max(0.66em, 14px); color: var(--ink); opacity: 0.82; margin-top: 0.7em; }
 .lights-verb::before { content: "click"; }
-.lights-verb { font-size: 0; }
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.skip-link { position: fixed; top: 0.5rem; left: 50%; transform: translate(-50%, -200%); z-index: 2000; padding: 0.5em 1em; border-radius: 2em; background: var(--ink); color: var(--paper, #f2f2f2); font-family: var(--sans); font-size: max(0.9rem, 14px); text-decoration: none; transition: transform 0.2s; }
+.skip-link:focus-visible { transform: translate(-50%, 0); outline: none; }
+a, img { -webkit-user-drag: none; user-drag: none; }
+html:not(.js) .pill-system { display: none; }
 @media (hover: none) and (pointer: coarse) { .lights-verb::before { content: "tap"; } }
 html.lights-waking .lights-notice { opacity: 0; }
 /* closed: the page is blurred and inert; only the notice is sharp. Everything wakes together on the first click. */

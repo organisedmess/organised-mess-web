@@ -477,7 +477,7 @@
 		var compact = html.classList.contains('mobile');
 		var status = isOpen
 			? (compact ? 'Open · Singapore' : 'Studio open · Singapore')
-			: compact ? 'Closed · ' + nextOpeningLocal().replace(', your time', '') : 'Studio closed · opens ' + nextOpeningLocal();   // visitor's clock, like the notice
+			: compact ? 'Closed · ' + nextOpeningLocal() : 'Studio closed · opens ' + nextOpeningLocal();   // visitor's clock, like the notice
 		el.querySelector('.studio-state').textContent = status;
 		el.classList.toggle('is-open', isOpen);
 
@@ -517,7 +517,13 @@
 		// say so in the middle of the dark sheet, immediately — otherwise it reads as a broken page
 		var notice = document.querySelector('.lights-notice');
 		if (notice) {
-			var when = nextOpening(now);   // "tomorrow at 09:00" / "on Monday at 09:00"
+			// visitors on another clock get told why the lights are off; locals just get the hours
+			var overseas = -new Date().getTimezoneOffset() !== STUDIO_UTC_OFFSET * 60;
+			if (overseas) {
+				notice.querySelector('.lights-l1').textContent = 'We noticed you\u2019re visiting from overseas.';
+				notice.querySelector('.lights-l2').innerHTML = 'The studio keeps Singapore hours \u2014 come back at <span class="lights-when"></span>,';
+				notice.querySelector('.lights-action').textContent = 'come in now';
+			}
 			notice.querySelector('.lights-when').textContent = nextOpeningLocal();
 			notice.hidden = false;
 		}
@@ -546,6 +552,9 @@
 			window.addEventListener('pointermove', onMove, { passive: true });   // a mouse moving is enough
 		}, 300);
 	})();
+
+	// links are not draggable: a native drag shows the OS cursor and strands the custom one
+	document.addEventListener('dragstart', function (e) { if (e.target.closest && e.target.closest('a, img')) e.preventDefault(); });
 
 	/* ------------------------------------------------------------------
 	   5. Load reveal — hero lines rise in, strips fade in, once.
