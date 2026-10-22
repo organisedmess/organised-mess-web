@@ -1,6 +1,7 @@
 {
 	// Cloudflare Workers — static site in ./site with a tiny Worker (worker.js)
-	// that serves the Capabilities deep link. _headers in site/ are honoured.
+	// that serves the Capabilities deep link and the contact form endpoint.
+	// _headers in site/ are honoured. RESEND_API_KEY is a secret, not set here.
 	"name": "organised-mess-web",
 	"main": "worker.js",
 	"compatibility_date": "2026-10-01",
@@ -8,5 +9,9 @@
 		"directory": "./site",
 		"binding": "ASSETS",
 		"not_found_handling": "404-page"
+	},
+	"vars": {
+		"CONTACT_TO": "hello@organisedmess.studio",
+		"CONTACT_FROM": "Organised Mess website <noreply@organisedmess.studio>"
 	}
 }

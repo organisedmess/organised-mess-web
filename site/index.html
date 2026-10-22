@@ -46,9 +46,7 @@
 <a class="skip-link" href="#main-index">Skip to content</a>
 
 <!-- ============ Header pills ============ -->
-<header class="bar bar-top" id="header">
-	<a class="pill pill-mail" href="mailto:hello@organisedmess.studio">hello@organisedmess.studio <span class="arr arr-ext">↗</span></a>
-</header>
+<header class="bar bar-top" id="header"></header>
 
 <!-- ============ Home ============ -->
 <main id="main-index" class="page page-home" tabindex="-1">
@@ -162,7 +160,36 @@
 					<h2 class="row-label">Contact</h2>
 				</div>
 				<div class="row-body">
-					<p><a href="mailto:hello@organisedmess.studio">hello@organisedmess.studio <span class="arr arr-ext">↗</span></a></p>
+					<form class="contact-form" action="/api/contact" method="post" novalidate>
+						<p class="contact-intro">Tell us about the project — a few lines is enough. We reply within two working days.</p>
+						<div class="field">
+							<label for="c-name">Name</label>
+							<input id="c-name" name="name" type="text" required autocomplete="name" maxlength="120">
+						</div>
+						<div class="field">
+							<label for="c-email">Email</label>
+							<input id="c-email" name="email" type="email" required autocomplete="email" maxlength="200" inputmode="email">
+						</div>
+						<div class="field">
+							<label for="c-org">Organisation <span class="opt">optional</span></label>
+							<input id="c-org" name="org" type="text" autocomplete="organization" maxlength="120">
+						</div>
+						<div class="field">
+							<label for="c-msg">Message</label>
+							<textarea id="c-msg" name="message" rows="5" required maxlength="4000"></textarea>
+						</div>
+						<div class="field field-hp" aria-hidden="true">
+							<label for="c-site">Website</label>
+							<input id="c-site" name="website" type="text" tabindex="-1" autocomplete="off">
+						</div>
+						<input type="hidden" name="t" value="">
+						<div class="contact-actions">
+							<button class="contact-send" type="submit">Send message&nbsp;<span class="arr">→</span></button>
+							<p class="contact-status" role="status" aria-live="polite"></p>
+						</div>
+						<p class="contact-alt">Or write to <a href="mailto:hello@organisedmess.studio">hello@organisedmess.studio</a>.</p>
+					</form>
+					<p class="contact-done" hidden tabindex="-1">Thank you — your message is with us. We’ll reply within two working days.</p>
 				</div>
 			</div>
 

@@ -553,6 +553,35 @@
 		}, 300);
 	})();
 
+	/* ------------------------------------------------------------------
+	   4b. Contact form — posts to /api/contact (worker.js) without leaving
+	   the window; falls back to a plain POST without JS.
+	   ------------------------------------------------------------------ */
+	(function contact() {
+		var form = document.querySelector('.contact-form');
+		if (!form) return;
+		var status = form.querySelector('.contact-status'), send = form.querySelector('.contact-send'), done = document.querySelector('.contact-done');
+		var stamp = form.querySelector('input[name="t"]');
+		if (stamp) stamp.value = String(Date.now());
+		function say(msg, err) { status.textContent = msg; status.classList.toggle('is-error', !!err); }
+		function finish() { form.hidden = true; done.hidden = false; done.focus(); }
+		if (params.get('sent') === '1') finish();   // the no-JS path lands back here
+		form.addEventListener('submit', function (e) {
+			e.preventDefault();
+			if (!form.checkValidity()) { say('Please fill in your name, email and a message.', true); var bad = form.querySelector(':invalid'); if (bad) bad.focus(); return; }
+			say('Sending…'); send.disabled = true;
+			var body = {};
+			new FormData(form).forEach(function (v, k) { body[k] = v; });
+			fetch(form.action, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, body: JSON.stringify(body) })
+				.then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; }); })
+				.then(function (res) {
+					if (res.ok) { finish(); return; }
+					say((res.j && res.j.error) || 'That didn’t send. Please try again, or write to hello@organisedmess.studio.', true); send.disabled = false;
+				})
+				.catch(function () { say('That didn’t send. Please try again, or write to hello@organisedmess.studio.', true); send.disabled = false; });
+		});
+	})();
+
 	// links are not draggable: a native drag shows the OS cursor and strands the custom one
 	document.addEventListener('dragstart', function (e) { if (e.target.closest && e.target.closest('a, img')) e.preventDefault(); });
 
