@@ -616,10 +616,18 @@
 				var b = document.createElement('button');
 				li.setAttribute('role', 'none');
 				b.type = 'button'; b.setAttribute('role', 'menuitemradio'); b.setAttribute('aria-checked', m === cur ? 'true' : 'false'); b.dataset.mode = m;
+				b.setAttribute('aria-describedby', 'system-desc');
 				b.innerHTML = '<span>' + window.Backdrop.names[m] + '</span><span class="system-key" aria-hidden="true">' + m + '</span>';
 				li.appendChild(b); menu.appendChild(li);
 			});
+			var d = document.createElement('li'); d.className = 'system-desc'; d.setAttribute('role', 'none'); d.id = 'system-desc';
+			menu.appendChild(d); describe(cur);
 		}
+		var descEl = function () { return menu.querySelector('.system-desc'); };
+		function describe(m) { var d = descEl(); if (d) d.textContent = (window.Backdrop.descriptions || {})[m] || ''; }
+		menu.addEventListener('mouseover', function (e) { var b = e.target.closest('button[data-mode]'); if (b) describe(b.dataset.mode); });
+		menu.addEventListener('focusin', function (e) { var b = e.target.closest('button[data-mode]'); if (b) describe(b.dataset.mode); });
+		menu.addEventListener('mouseleave', function () { if (inst()) describe(inst().mode); });
 		function toggle(force) {
 			var open = typeof force === 'boolean' ? force : menu.hidden;
 			menu.hidden = !open; btn.setAttribute('aria-expanded', open ? 'true' : 'false');

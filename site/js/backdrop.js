@@ -567,14 +567,16 @@
 			pat: 'smoothstep(0.1, 0.95, max(s.r, s.g * 0.6)) - s.b * 0.75', rawink: routerInk(false, false),
 			uniforms: { uOrtho: 0, uSignal: 0, uLayers: 0, uSpawn: 0.0000005, uAgeRate: 0.00055, uTurn: 0.015, uMaxLen: 60, uIc: 0.5, uIcBlock: 64 } }, o);
 	};
-	var ROUTERS = {
-		'router':        ROUTER({ }),
+	// variants kept for reference; only the layered one is registered (pad arrays off: uIc 0)
+	var ROUTER_VARIANTS = {
+		'router-45':     ROUTER({ }),
 		'router-ortho':  ROUTER({ uniforms: { uOrtho: 1, uSignal: 0, uLayers: 0, uSpawn: 0.0000005, uAgeRate: 0.00055, uTurn: 0.012, uMaxLen: 60, uIc: 0.5, uIcBlock: 64 } }),
 		'router-dense':  ROUTER({ uniforms: { uOrtho: 0, uSignal: 0, uLayers: 0, uSpawn: 0.0000015, uAgeRate: 0.0005, uTurn: 0.02, uMaxLen: 55, uIc: 0.6, uIcBlock: 56 } }),
 		'router-sparse': ROUTER({ uniforms: { uOrtho: 0, uSignal: 0, uLayers: 0, uSpawn: 0.0000002, uAgeRate: 0.0005, uTurn: 0.01, uMaxLen: 90, uIc: 0.35, uIcBlock: 80 } }),
 		'router-signal': ROUTER({ rawink: routerInk(false, true), uniforms: { uOrtho: 0, uSignal: 1, uLayers: 0, uSpawn: 0.0000005, uAgeRate: 0.0005, uTurn: 0.015, uMaxLen: 60, uIc: 0.5, uIcBlock: 64 } }),
 		'router-layers': ROUTER({ rawink: routerInk(true, false), uniforms: { uOrtho: 0, uSignal: 0, uLayers: 1, uSpawn: 0.0000004, uAgeRate: 0.00055, uTurn: 0.015, uMaxLen: 60, uIc: 0.5, uIcBlock: 64 } })
 	};
+	var ROUTERS = { router: ROUTER({ rawink: routerInk(true, false), uniforms: { uOrtho: 0, uSignal: 0, uLayers: 1, uSpawn: 0.0000004, uAgeRate: 0.00055, uTurn: 0.015, uMaxLen: 60, uIc: 0, uIcBlock: 64 } }) };
 	var LEGACY = {
 		life:       { step: STEP_LIFE,       float: false, res: 7, cap: 256, tick: 0.3,    steps: 1, warm: 0,   soft: 0.8, pat: 'max(s.r, s.g * 0.8)' },
 		lenia:      { heavy: true, step: STEP_LENIA,      float: true,  res: 3, cap: 512, tick: 1 / 10, steps: 1, warm: 30,  soft: 1.2, pat: 'smoothstep(0.06, 0.7, s.r)' },
@@ -594,8 +596,26 @@
 	// everything in the pool for now, routers first, so they can be compared side by side
 	var SYSTEMS = Object.assign({}, ROUTERS, LEGACY);
 	var MODES = Object.keys(SYSTEMS);
-	var NAMES = { 'router': 'Router · 45°', 'router-ortho': 'Router · orthogonal', 'router-dense': 'Router · dense', 'router-sparse': 'Router · sparse', 'router-signal': 'Router · signal', 'router-layers': 'Router · layers', life: 'Game of Life', lenia: 'Lenia', smoothlife: 'SmoothLife', mnca: 'Multi-neighbourhood CA', rd: 'Reaction–diffusion', cyclic: 'Cyclic automaton', bz: 'Belousov–Zhabotinsky', physarum: 'Physarum', ink: 'Ink flow', bugs: 'Larger than Life', waves: 'Wave field', crystal: 'Crystal growth', flow: 'Flow field', dla: 'Diffusion-limited aggregation' };
+	var NAMES = { router: 'Router', life: 'Game of Life', lenia: 'Lenia', smoothlife: 'SmoothLife', mnca: 'Multi-neighbourhood CA', rd: 'Reaction–diffusion', cyclic: 'Cyclic automaton', bz: 'Belousov–Zhabotinsky', physarum: 'Physarum', ink: 'Ink flow', bugs: 'Larger than Life', waves: 'Wave field', crystal: 'Crystal growth', flow: 'Flow field', dla: 'Diffusion-limited aggregation' };
 
+	// one line each, for the menu
+	var DESCS = {
+		router: 'Our own autorouter. Pads appear, traces route out from them on two layers, jog around each other and end in pads or vias; everything ages off the board and is re-routed.',
+		life: "Conway's Game of Life. A cell lives with two or three neighbours, is born with three, and dies otherwise.",
+		lenia: 'Lenia. A continuous Game of Life: smooth kernels and a growth curve instead of a cell count, so creatures glide rather than blink.',
+		smoothlife: 'SmoothLife. Life on a continuous grid with ring-shaped neighbourhoods; blobs drift, split and merge.',
+		mnca: 'Multi-neighbourhood cellular automaton. Several rings of neighbours vote at once, giving cells, membranes and textures.',
+		rd: 'Gray–Scott reaction–diffusion. Two chemicals feed on and destroy each other while spreading, forming spots and stripes.',
+		cyclic: 'Cyclic cellular automaton. Each state is eaten by the next in a loop, so spirals wind up out of noise.',
+		bz: 'Belousov–Zhabotinsky. A model of the oscillating chemical reaction: target patterns and spiral waves.',
+		physarum: 'Physarum. Thousands of agents sense and follow each other’s trails like slime mould, building networks.',
+		ink: 'Ink flow. Pigment carried on a slowly stirred fluid, diffusing as it goes.',
+		bugs: 'Larger than Life. Game of Life with a big neighbourhood and wide birth and survival bands; amoeba-like shapes.',
+		waves: 'Wave field. The wave equation on a grid, driven by a few moving sources; ripples cross and interfere.',
+		crystal: 'Crystal growth. A snowflake-style automaton: the edge freezes where vapour is dense enough, branching as it goes.',
+		flow: 'Flow field. Particles ride a slowly turning noise field, leaving trails where they pass.',
+		dla: 'Diffusion-limited aggregation. Random walkers stick when they touch the cluster, growing branching deposits.'
+	};
 	function num(v, d) { var n = parseFloat(v); return isNaN(n) ? d : n; }
 	function hexToRgb(h) {
 		h = h.replace('#', ''); if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
@@ -1054,6 +1074,7 @@
 	window.Backdrop = Backdrop;
 	Backdrop.modes = MODES;
 	Backdrop.names = NAMES;
+	Backdrop.descriptions = DESCS;
 	Backdrop.instances = [];
 	// ?bg=… or #<mode>[+os] (the hash form works on the artifact preview)
 	var hashParts = (location.hash || '').slice(1).split('+');
