@@ -527,6 +527,8 @@ a.pill:hover { background: rgba(255, 255, 255, 0.34); }
 .field input:focus-visible, .field textarea:focus-visible { border-bottom-color: var(--ink); }
 .field input:user-invalid, .field textarea:user-invalid { border-bottom-color: #b3261e; }
 .field-hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+.turnstile { margin: var(--s-2) 0 0; }
+.turnstile:empty { display: none; }
 .contact-actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s-2); margin-top: var(--s-2); }
 .contact-send {
 	display: inline-flex; align-items: center; height: var(--pill-h); min-height: 30px; padding: 0 1.1em;

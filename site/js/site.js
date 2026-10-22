@@ -564,12 +564,32 @@
 		var stamp = form.querySelector('input[name="t"]');
 		if (stamp) stamp.value = String(Date.now());
 		function say(msg, err) { status.textContent = msg; status.classList.toggle('is-error', !!err); }
+		// Turnstile loads only once the form is in view; invisible unless Cloudflare needs a challenge
+		var tsEl = form.querySelector('.turnstile'), tsLoaded = false, widget = null;
+		function loadTurnstile() {
+			if (tsLoaded || !tsEl) return; tsLoaded = true;
+			window.omTurnstile = function () {
+				try { widget = window.turnstile.render(tsEl, { sitekey: tsEl.dataset.sitekey, appearance: 'interaction-only', theme: 'light', size: 'flexible' }); } catch (e) {}
+			};
+			var s = document.createElement('script'); s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?onload=omTurnstile&render=explicit'; s.async = true; s.defer = true;
+			s.onerror = function () { tsLoaded = false; };   // blocked: don't hold the send up for a token that will never come
+			document.head.appendChild(s);
+		}
+		if ('IntersectionObserver' in window) { var io = new IntersectionObserver(function (es) { if (es.some(function (x) { return x.isIntersecting; })) { loadTurnstile(); io.disconnect(); } }); io.observe(form); }
+		form.addEventListener('focusin', loadTurnstile, { once: true });
+		function token() { try { return widget !== null ? window.turnstile.getResponse(widget) : ''; } catch (e) { return ''; } }
+		// the token can take a moment after the widget renders; wait up to five seconds for it
+		function withToken(cb) {
+			if (!tsLoaded || token()) return cb();
+			var waited = 0, iv = setInterval(function () { waited += 250; if (token() || waited >= 5000) { clearInterval(iv); cb(); } }, 250);
+		}
 		function finish() { form.hidden = true; done.hidden = false; done.focus(); }
 		if (params.get('sent') === '1') finish();   // the no-JS path lands back here
 		form.addEventListener('submit', function (e) {
 			e.preventDefault();
 			if (!form.checkValidity()) { say('Please fill in your name, email and a message.', true); var bad = form.querySelector(':invalid'); if (bad) bad.focus(); return; }
 			say('Sending…'); send.disabled = true;
+			withToken(function () {
 			var body = {};
 			new FormData(form).forEach(function (v, k) { body[k] = v; });
 			fetch(form.action, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, body: JSON.stringify(body) })
@@ -579,6 +599,7 @@
 					say((res.j && res.j.error) || 'That didn’t send. Please try again, or write to hello@organisedmess.studio.', true); send.disabled = false;
 				})
 				.catch(function () { say('That didn’t send. Please try again, or write to hello@organisedmess.studio.', true); send.disabled = false; });
+			});
 		});
 	})();
 

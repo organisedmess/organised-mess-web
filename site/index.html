@@ -183,6 +183,9 @@
 							<input id="c-site" name="website" type="text" tabindex="-1" autocomplete="off">
 						</div>
 						<input type="hidden" name="t" value="">
+						<!-- Turnstile (spam check). Replace data-sitekey with the real site key from Cloudflare → Turnstile;
+						     this one is Cloudflare's invisible always-pass test key. The secret goes in the worker as TURNSTILE_SECRET. -->
+						<div class="turnstile" data-sitekey="1x00000000000000000000BB"></div>
 						<div class="contact-actions">
 							<button class="contact-send" type="submit">Send message&nbsp;<span class="arr">→</span></button>
 							<p class="contact-status" role="status" aria-live="polite"></p>

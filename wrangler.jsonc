@@ -1,7 +1,7 @@
 {
 	// Cloudflare Workers — static site in ./site with a tiny Worker (worker.js)
 	// that serves the Capabilities deep link and the contact form endpoint.
-	// _headers in site/ are honoured. RESEND_API_KEY is a secret, not set here.
+	// _headers in site/ are honoured.
 	"name": "organised-mess-web",
 	"main": "worker.js",
 	"compatibility_date": "2026-10-01",
@@ -10,8 +10,11 @@
 		"binding": "ASSETS",
 		"not_found_handling": "404-page"
 	},
+	// outbound email, all on Cloudflare: Email Routing must be on for organisedmess.studio and
+	// CONTACT_TO verified there as a destination address. TURNSTILE_SECRET is a secret, set in the dashboard.
+	"send_email": [{ "name": "CONTACT_MAIL" }],
 	"vars": {
-		"CONTACT_TO": "hello@organisedmess.studio",
+		"CONTACT_TO": "matt@matthewlaujh.com",
 		"CONTACT_FROM": "Organised Mess website <noreply@organisedmess.studio>"
 	}
 }
