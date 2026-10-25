@@ -4,10 +4,10 @@
 //  · marks the workers.dev staging host noindex
 // Everything else passes straight through to the static assets.
 //
-// Contact form, all on Cloudflare:
-//  · delivery: the `send_email` binding (CONTACT_MAIL in wrangler.jsonc). Needs Email Routing
-//    enabled on organisedmess.studio and CONTACT_TO verified there as a destination address.
-//    (Resend is kept as a fallback if RESEND_API_KEY is set and the binding is not.)
+// Contact form:
+//  · delivery: Resend (secret RESEND_API_KEY; sender domain send.organisedmess.studio verified there).
+//    Cloudflare's own send_email binding is also supported if a CONTACT_MAIL binding is ever added,
+//    but it needs Email Routing on the zone, which would replace the Google Workspace MX records.
 //  · spam: Turnstile (secret TURNSTILE_SECRET; site key in index.html), plus a honeypot field,
 //    a minimum fill time and a per-IP rate limit.
 import { EmailMessage } from 'cloudflare:email';
@@ -85,15 +85,15 @@ async function contact(request, env, url) {
 	].join('\n');
 
 	try {
-		if (env.CONTACT_MAIL) {
-			await env.CONTACT_MAIL.send(new EmailMessage(addr(from), to, mime({ from, to, replyTo: email, subject, text })));
-		} else if (env.RESEND_API_KEY) {
+		if (env.RESEND_API_KEY) {
 			const r = await fetch('https://api.resend.com/emails', {
 				method: 'POST',
 				headers: { 'Authorization': `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
 				body: JSON.stringify({ from, to: [to], reply_to: email, subject, text })
 			});
 			if (!r.ok) throw new Error('resend ' + r.status);
+		} else if (env.CONTACT_MAIL) {
+			await env.CONTACT_MAIL.send(new EmailMessage(addr(from), to, mime({ from, to, replyTo: email, subject, text })));
 		} else {
 			return reply({ error: 'The form isn’t connected yet — please write to hello@organisedmess.studio.' }, 503);
 		}
