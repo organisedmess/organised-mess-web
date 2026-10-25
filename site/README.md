@@ -46,15 +46,16 @@ a commented template). The login already covers it.
 
 `internal/tools/index.html` renders every tool in the workshop from
 `internal/tools/data/tools.json` (one record per line item) and `kits.json`
-(set-level records), with product photos in `internal/tools/img/`. Search matches
+(set-level records), with product photos in `internal/tools/img/` — transparent WebP cut-outs made by `tools/cutout.py` from the white-background source shots (click a thumbnail to enlarge). Search matches
 name, brand, model, size, details, uses and tags; short or numeric terms match whole
 tokens ("tx 8" won't light up "80 mm"). Category chips filter; sets are collapsible
 rows — collapsed when the set's own description matches, open on just the matching
 items when its contents do. `?q=` and `?cat=` are shareable. `/` focuses the search box.
 The old address `/tools` redirects here.
 
-**Updating:** re-export the inventory, replace `internal/tools/data/*.json` and any new
-photos in `internal/tools/img/`. The header stats are computed from the data; only the
+**Updating:** re-export the inventory, replace `internal/tools/data/*.json` and run new photos
+through `tools/cutout.py` into `internal/tools/img/` (keys match the `key`/`pkey` fields). Loose
+items carry a `title` (the product name shown as the row heading; `name` becomes the description). The header stats are computed from the data; only the
 "Updated" date is a constant at the top of `internal/tools/tools.js`.
 
 ## Local preview

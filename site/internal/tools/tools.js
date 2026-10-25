@@ -12,9 +12,10 @@
 		'Screwdrivers & bits', 'Ratchets & sockets', 'Hex keys', 'Power tools',
 		'Crimpers', 'Strippers', 'Cutters & shears', 'Pliers', 'Tweezers',
 		'Soldering', 'Desoldering', 'Soldering aids', 'Fume extraction',
-		'Workholding', 'Wire wrap', 'Testing & measuring', '3D printing', 'Cleaning'
+		'Workholding', 'Wire wrap', 'Testing & measuring', '3D printing', 'Laser cutting', 'Cleaning'
 	];
 	var UPDATED = '25 Oct 2026';
+	var IMG = '/internal/tools/img/';
 
 	var $list = document.getElementById('tools-list');
 	var $stats = document.getElementById('tools-stats');
@@ -76,7 +77,7 @@
 				});
 				rows.push({
 					type: 'kit', cat: cat, name: name, kit: kit, subs: subRows,
-					hay: norm([name, kit.uses, (kit.tags || []).join(' '), kit.size].join(' ')),
+					hay: norm([name, kit.title, kit.uses, (kit.tags || []).join(' '), kit.size].join(' ')),
 					pieces: sub.reduce(function (n, t) { return n + (t.qty || 0); }, 0)
 				});
 			});
@@ -85,7 +86,7 @@
 	}
 
 	function haystack(t) {
-		return norm([t.name, t.brand, t.model, t.size, t.detail, t.uses, (t.tags || []).join(' '), t.note].join(' '));
+		return norm([t.title, t.name, t.brand, t.model, t.size, t.detail, t.uses, (t.tags || []).join(' '), t.note].join(' '));
 	}
 	function norm(s) {
 		return String(s || '').toLowerCase()
@@ -184,18 +185,27 @@
 
 	function rowHtml(t, parentKit, ts) {
 		var key = t.key || t.pkey;
-		var img = key ? '<img class="tool-thumb" src="/tools/img/' + esc(key) + '.jpg" alt="" loading="lazy" onerror="this.classList.add(\'is-missing\')">'
-			: '<span class="tool-thumb is-missing"></span>';
+		var label = t.title || t.name;
+		var img = thumb(key, label);
 		var brand = [t.brand, t.model].filter(function (s) { return s && s !== '—'; }).join(' ');
-		var link = t.url ? '<a href="' + esc(t.url) + '" target="_blank" rel="noopener">' + hl(brand, ts) + '&nbsp;<span class="arr arr-ext">↗</span></a>' : hl(brand, ts);
+		// titled (loose) items: the title already names the product, so this line is the page link and,
+		// where the model carries a part number the title dropped, that number
+		var text = brand;
+		if (t.title) {
+			var extra = /\(([^)]+)\)/.exec(t.model || '');
+			text = extra ? extra[1] : '';
+		}
+		var linkText = t.title ? (t.official === false ? 'Product page' : 'Official page') : hl(brand, ts);
+		var link = t.url ? (text ? hl(text, ts) + ' \u00b7 ' : '') + '<a href="' + esc(t.url) + '" target="_blank" rel="noopener">' + linkText + '&nbsp;<span class="arr arr-ext">\u2197</span></a>' : hl(text, ts);
 		var size = t.size ? hl(t.size, ts) : '';
 		var detail = t.detail ? '<span class="tool-detail">' + hl(t.detail, ts) + '</span>' : '';
 		var uses = t.uses ? hl(t.uses, ts) : '';
 		var tags = (t.tags && t.tags.length) ? '<span class="tool-tags">' + t.tags.map(function (g) { return '<span>' + hl(g, ts) + '</span>'; }).join('') + '</span>' : '';
 		var note = t.note ? '<span class="tool-detail">' + hl(t.note, ts) + '</span>' : '';
 
+		var desc = t.title ? '<span class="tool-desc">' + hl(t.name, ts) + '</span>' : '';
 		return '<div class="tool-row">' + img +
-			'<div class="tool-main"><p class="tool-name">' + hl(t.name, ts) + '</p><span class="tool-brand">' + link + '</span></div>' +
+			'<div class="tool-main"><p class="tool-name">' + hl(label, ts) + '</p>' + desc + '<span class="tool-brand">' + link + '</span></div>' +
 			'<div class="tool-sizecol"><span class="tool-size">' + size + '</span>' + detail + note + '</div>' +
 			'<div class="tool-usescol"><span class="tool-uses">' + uses + '</span>' + tags + '</div>' +
 			'<span class="tool-qty">' + (t.qty || 0) + '</span>' +
@@ -204,8 +214,8 @@
 
 	function kitHtml(v, ts) {
 		var row = v.row, kit = row.kit;
-		var img = kit.key ? '<img class="tool-thumb" src="/tools/img/' + esc(kit.key) + '.jpg" alt="" loading="lazy" onerror="this.classList.add(\'is-missing\')">'
-			: '<span class="tool-thumb is-missing"></span>';
+		var label = kit.title || row.name;
+		var img = thumb(kit.key, label);
 		var link = kit.url ? '<a href="' + esc(kit.url) + '" target="_blank" rel="noopener">' + (kit.official === false ? 'Product page' : 'Official page') + '&nbsp;<span class="arr arr-ext">↗</span></a>' : '';
 		var tags = (kit.tags && kit.tags.length) ? '<span class="tool-tags">' + kit.tags.map(function (g) { return '<span>' + hl(g, ts) + '</span>'; }).join('') + '</span>' : '';
 		var n = row.subs.length;
@@ -215,7 +225,7 @@
 
 		var html = '<details class="kit"' + (v.open ? ' open' : '') + '><summary>' +
 			'<div class="tool-row">' + img +
-			'<div class="tool-main"><p class="tool-name">' + hl(row.name, ts) + '</p>' + badge + (link ? '<span class="tool-brand">' + link + '</span>' : '') + '</div>' +
+			'<div class="tool-main"><p class="tool-name">' + hl(label, ts) + '</p>' + badge + (link ? '<span class="tool-brand">' + link + '</span>' : '') + '</div>' +
 			'<div class="tool-sizecol"><span class="tool-size">' + hl(kit.size || '', ts) + '</span></div>' +
 			'<div class="tool-usescol"><span class="tool-uses">' + hl(kit.uses || '', ts) + '</span>' + tags + '</div>' +
 			'<span class="tool-qty">' + row.pieces + '</span>' +
@@ -223,6 +233,14 @@
 		v.subs.forEach(function (s) { html += rowHtml(s.item, kit, ts); });
 		html += '</div></details>';
 		return html;
+	}
+
+	// a thumbnail that opens the full cut-out on click; hidden if the file is missing
+	function thumb(key, label) {
+		if (!key) return '<span class="tool-thumb is-missing"></span>';
+		var src = IMG + esc(key) + '.webp';
+		return '<button type="button" class="tool-thumb-btn" data-src="' + src + '" data-label="' + esc(label) + '" aria-label="Enlarge: ' + esc(label) + '">' +
+			'<img class="tool-thumb" src="' + src + '" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.add(\'is-missing\')"></button>';
 	}
 
 	/* ------------------------------------------------------------------ */
@@ -275,6 +293,42 @@
 			}
 		});
 		window.addEventListener('popstate', function () { readUrl(); $q.value = state.q; render(); });
+
+		// enlarge a photo in a small window; Escape, the dot or a click outside closes it
+		$list.addEventListener('click', function (e) {
+			var b = e.target.closest('.tool-thumb-btn');
+			if (!b) return;
+			e.preventDefault(); e.stopPropagation();
+			openZoom(b.getAttribute('data-src'), b.getAttribute('data-label'), b);
+		});
+	}
+
+	var $zoom = null, zoomFrom = null;
+	function openZoom(src, label, from) {
+		if (!$zoom) {
+			$zoom = document.createElement('div');
+			$zoom.className = 'tool-zoom';
+			$zoom.innerHTML = '<div class="os-win tool-zoom-win" role="dialog" aria-modal="true" aria-labelledby="tool-zoom-title" tabindex="-1">' +
+				'<div class="os-titlebar"><button type="button" class="os-dot" aria-label="Close"></button><span class="os-title" id="tool-zoom-title"></span><span class="os-meta">Photo</span></div>' +
+				'<div class="tool-zoom-body"><img alt=""></div></div>';
+			document.body.appendChild($zoom);
+			$zoom.addEventListener('click', function (e) {
+				if (e.target === $zoom || e.target.closest('.os-dot')) closeZoom();
+			});
+			document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$zoom.hidden) closeZoom(); });
+		}
+		zoomFrom = from;
+		$zoom.querySelector('img').src = src;
+		$zoom.querySelector('img').alt = label;
+		$zoom.querySelector('#tool-zoom-title').textContent = label;
+		$zoom.hidden = false;
+		document.body.classList.add('no-scroll');
+		$zoom.querySelector('.os-win').focus();
+	}
+	function closeZoom() {
+		$zoom.hidden = true;
+		document.body.classList.remove('no-scroll');
+		if (zoomFrom) zoomFrom.focus();
 	}
 
 	function readUrl() {

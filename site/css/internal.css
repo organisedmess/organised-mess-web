@@ -112,12 +112,12 @@ body.internal { background-color: var(--paper); }
 /* 4. Tool rows -------------------------------------------------------------- */
 .tool-rows { width: 100%; }
 .tool-row {
-	--thumb: 3.6rem;
+	--thumb: 7rem;
 	display: grid;
 	grid-template-columns: var(--thumb) minmax(0, 5fr) minmax(0, 4fr) minmax(0, 7fr) 2.4rem;
 	gap: 0 var(--s-2);
 	align-items: start;
-	padding: 0.6rem 0;
+	padding: 0.8rem 0;
 	border-bottom: 1px solid var(--rule);
 	transition: background-color 150ms var(--ease-out);
 }
@@ -125,16 +125,24 @@ body.internal { background-color: var(--paper); }
 .tool-rows > .kit:last-child > summary .tool-row { border-bottom-color: transparent; }
 .tool-row:hover { background-color: rgba(0, 0, 0, 0.035); }
 
+.tool-thumb-btn {
+	appearance: none; border: 0; padding: 0; margin: 0; background: transparent; cursor: zoom-in;
+	display: block; width: var(--thumb); height: var(--thumb);
+	border-radius: 0.4rem;
+}
+.tool-thumb-btn:focus-visible { outline: 1px solid var(--ink); outline-offset: 0.2em; }
+.tool-thumb-btn.is-missing { visibility: hidden; }
 .tool-thumb {
 	display: block;
-	width: var(--thumb); height: var(--thumb);
+	width: 100%; height: 100%;
 	object-fit: contain;
-	/* product shots are masked onto white; multiply drops that white into the paper */
-	mix-blend-mode: multiply;
+	/* cut-outs with real transparency, so they sit on the paper with no box */
+	filter: drop-shadow(0 0.15rem 0.35rem rgba(0, 0, 0, 0.12));
 	transition: transform 300ms var(--ease-out);
 }
-.tool-row:hover .tool-thumb { transform: scale(1.08); }
+.tool-row:hover .tool-thumb { transform: scale(1.06); }
 .tool-thumb.is-missing { visibility: hidden; }
+.tool-desc { display: block; margin-top: 0.15em; font-size: var(--t-m); color: var(--ink); opacity: 0.8; }
 
 .tool-main { min-width: 0; }
 .tool-name { margin: 0; font-size: var(--t-m); line-height: 1.3; }
@@ -192,11 +200,40 @@ mark { background: transparent; color: inherit; box-shadow: inset 0 -0.5em rgba(
 	to { opacity: 1; transform: none; }
 }
 .kit-items .tool-row {
-	--thumb: 2.4rem;
-	padding: 0.4rem 0;
+	--thumb: 4.5rem;
+	padding: 0.45rem 0;
 	grid-template-columns: var(--thumb) minmax(0, 6fr) minmax(0, 3fr) minmax(0, 7fr) 2.4rem;
 }
 .kit-items .tool-row:last-child { border-bottom-color: transparent; }
+
+/* 5b. Photo window ----------------------------------------------------------- */
+.tool-zoom {
+	position: fixed; inset: 0; z-index: 1200;
+	display: flex; align-items: center; justify-content: center;
+	padding: var(--page-pad);
+	background: rgba(0, 0, 0, 0.18);
+	-webkit-backdrop-filter: blur(0.2rem); backdrop-filter: blur(0.2rem);
+	animation: zoomIn 0.25s var(--ease-out);
+}
+.tool-zoom[hidden] { display: none; }
+.tool-zoom-win {
+	width: min(46rem, 100%);
+	max-height: calc(100vh - 2 * var(--page-pad));
+	display: flex; flex-direction: column;
+	cursor: default;
+}
+.tool-zoom-win .os-dot { appearance: none; border: 0; padding: 0; }
+.tool-zoom-body {
+	flex: 1 1 auto; min-height: 0;
+	display: flex; align-items: center; justify-content: center;
+	padding: 1.4rem;
+}
+.tool-zoom-body img {
+	width: 100%; max-height: calc(100vh - 2 * var(--page-pad) - 6rem);
+	object-fit: contain; image-rendering: auto;
+	filter: drop-shadow(0 0.4rem 1rem rgba(0, 0, 0, 0.14));
+}
+@keyframes zoomIn { from { opacity: 0; } to { opacity: 1; } }
 
 /* 6. Empty + foot ----------------------------------------------------------- */
 .tools-empty {
@@ -214,7 +251,7 @@ mark { background: transparent; color: inherit; box-shadow: inset 0 -0.5em rgba(
 
 /* 7. Mobile ----------------------------------------------------------------- */
 .mobile .tool-row {
-	--thumb: 3rem;
+	--thumb: 5rem;
 	grid-template-columns: var(--thumb) minmax(0, 1fr) 2rem;
 	grid-template-areas:
 		"thumb name qty"
@@ -222,7 +259,7 @@ mark { background: transparent; color: inherit; box-shadow: inset 0 -0.5em rgba(
 		"thumb uses uses";
 	gap: 0.15rem var(--s-1);
 }
-.mobile .kit-items .tool-row { --thumb: 2.2rem; grid-template-columns: var(--thumb) minmax(0, 1fr) 2rem; }
+.mobile .kit-items .tool-row { --thumb: 3.4rem; grid-template-columns: var(--thumb) minmax(0, 1fr) 2rem; }
 .mobile .tool-thumb { grid-area: thumb; }
 .mobile .tool-main { grid-area: name; }
 .mobile .tool-sizecol { grid-area: size; }
