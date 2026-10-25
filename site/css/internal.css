@@ -1,0 +1,286 @@
+/* ==========================================================================
+   organisedmess.studio — /internal: the login, the index, and /internal/tools
+   Additive to site.css: same tokens, type scale, pills and the numbered
+   .row grid from Capabilities. Nothing here touches the home page.
+   ========================================================================== */
+
+/* 1. Page frame ------------------------------------------------------------- */
+body.internal { background-color: var(--paper); }
+.bar-tools { justify-content: space-between; }
+.page-tools .page-content {
+	--clear-top: calc(var(--bar-pad) + var(--pill-h));
+	padding: calc(var(--clear-top) + var(--s-4)) var(--page-pad) var(--s-4);
+	max-width: 110rem;
+}
+
+.tools-head { margin-bottom: var(--s-4); }
+.tools-title {
+	font-size: var(--t-xxl);
+	letter-spacing: -0.005em;
+	line-height: 1;
+}
+.mobile .tools-title { font-size: 3rem; }
+.tools-meta {
+	margin-top: var(--s-1);
+	font-size: var(--t-xs);
+	color: var(--muted);
+}
+
+/* 2. Search ----------------------------------------------------------------- */
+.tools-search { margin-bottom: var(--s-3); max-width: 64rem; }
+.tools-field {
+	position: relative;
+	display: flex;
+	align-items: baseline;
+	border-bottom: 1px solid var(--rule-strong);
+	transition: border-color 0.2s;
+}
+.tools-field:focus-within { border-bottom-color: var(--ink); }
+.tools-field input {
+	appearance: none; -webkit-appearance: none;
+	flex: 1 1 auto; width: 100%;
+	margin: 0; padding: 0.15em 0 0.3em;
+	border: 0; border-radius: 0; outline: none;
+	background: transparent; color: var(--ink);
+	font-family: var(--serif); font-weight: 300;
+	font-size: var(--t-xl); line-height: 1.2;
+}
+.mobile .tools-field input { font-size: 2rem; }
+.tools-field input::placeholder { color: var(--muted); opacity: 0.6; font-style: italic; }
+.tools-field input::-webkit-search-cancel-button,
+.tools-field input::-webkit-search-decoration { -webkit-appearance: none; display: none; }
+.tools-clear {
+	appearance: none; border: 0; background: transparent; cursor: pointer;
+	margin: 0; padding: 0 0.3rem;
+	color: var(--muted); font: inherit; font-size: var(--t-l); line-height: 1;
+	transition: color 0.15s;
+}
+.tools-clear:hover { color: var(--ink); }
+
+/* chips: small outlined pills; the active one is inked, like the send button */
+.tools-chips {
+	display: flex; flex-wrap: wrap;
+	gap: 0.4rem;
+	margin-top: var(--s-2);
+}
+.tools-chip {
+	appearance: none; cursor: pointer;
+	display: inline-flex; align-items: center; gap: 0.5em;
+	height: max(1.5rem, 26px); padding: 0 0.85em;
+	border-radius: 999px;
+	border: 1px solid var(--rule-strong);
+	background: transparent; color: var(--ink);
+	font-family: var(--sans); font-weight: 300;
+	font-size: max(0.85rem, 12px); letter-spacing: 0.01em; line-height: 1;
+	transition: border-color 0.15s, background-color 0.2s, color 0.2s, opacity 0.2s;
+}
+.tools-chip .n {
+	color: var(--muted);
+	font-size: 0.85em;
+}
+.tools-chip:hover { border-color: var(--ink); }
+.tools-chip[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+.tools-chip[aria-pressed="true"] .n { color: var(--paper); opacity: 0.6; }
+.tools-chip.is-empty { opacity: 0.3; pointer-events: none; }
+.tools-result {
+	margin-top: var(--s-2);
+	min-height: 1.3em;
+	font-size: var(--t-xs);
+	color: var(--muted);
+}
+
+/* 3. Category sections (the Capabilities .row grid) ------------------------- */
+.tools-list .row { padding-bottom: var(--s-3); }
+.tools-list .row:last-of-type { padding-bottom: var(--s-3); border-bottom: 1px solid var(--rule-strong); }
+.tools-list .row-head {
+	position: sticky;
+	top: var(--s-2);
+	align-self: start;
+	flex-wrap: wrap;
+	row-gap: 0.2rem;
+}
+.tools-list .row-label { font-size: var(--t-l); }
+.tools-list .cat-count {
+	flex-basis: 100%;
+	padding-left: 2.1rem;
+	font-size: var(--t-xs);
+	color: var(--muted);
+}
+.mobile .tools-list .row-head { position: static; }
+.mobile .tools-list .cat-count { padding-left: 2.4rem; }
+
+/* 4. Tool rows -------------------------------------------------------------- */
+.tool-rows { width: 100%; }
+.tool-row {
+	--thumb: 3.6rem;
+	display: grid;
+	grid-template-columns: var(--thumb) minmax(0, 5fr) minmax(0, 4fr) minmax(0, 7fr) 2.4rem;
+	gap: 0 var(--s-2);
+	align-items: start;
+	padding: 0.6rem 0;
+	border-bottom: 1px solid var(--rule);
+	transition: background-color 150ms var(--ease-out);
+}
+.tool-rows > .tool-row:last-child,
+.tool-rows > .kit:last-child > summary .tool-row { border-bottom-color: transparent; }
+.tool-row:hover { background-color: rgba(0, 0, 0, 0.035); }
+
+.tool-thumb {
+	display: block;
+	width: var(--thumb); height: var(--thumb);
+	object-fit: contain;
+	/* product shots are masked onto white; multiply drops that white into the paper */
+	mix-blend-mode: multiply;
+	transition: transform 300ms var(--ease-out);
+}
+.tool-row:hover .tool-thumb { transform: scale(1.08); }
+.tool-thumb.is-missing { visibility: hidden; }
+
+.tool-main { min-width: 0; }
+.tool-name { margin: 0; font-size: var(--t-m); line-height: 1.3; }
+.tool-brand {
+	display: block; margin-top: 0.2em;
+	font-size: var(--t-xs); color: var(--muted); letter-spacing: 0.01em;
+}
+.tool-brand a {
+	text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 0.14em;
+	text-decoration-color: var(--link-underline);
+	transition: text-decoration-color 150ms var(--ease-out), color 150ms var(--ease-out);
+}
+.tool-brand a:hover { color: var(--ink); text-decoration-color: currentColor; }
+.tool-brand a .arr { font-size: 0.9em; }
+
+.tool-size { font-size: var(--t-m); color: var(--ink); opacity: 0.8; }
+.tool-detail { display: block; margin-top: 0.2em; font-size: var(--t-xs); color: var(--muted); line-height: 1.35; }
+.tool-uses { font-size: var(--t-m); max-width: 44rem; display: block; }
+.tool-tags { display: block; margin-top: 0.25em; font-size: var(--t-xs); color: var(--muted); letter-spacing: 0.01em; }
+.tool-tags span::after { content: " · "; }
+.tool-tags span:last-child::after { content: ""; }
+.tool-qty {
+	text-align: right; white-space: nowrap;
+	font-size: var(--t-m); color: var(--muted);
+	font-variant-numeric: tabular-nums;
+}
+.tool-qty::before { content: "×"; opacity: 0.5; margin-right: 0.08em; }
+
+mark { background: transparent; color: inherit; box-shadow: inset 0 -0.5em rgba(255, 196, 0, 0.4); }
+
+/* 5. Sets (collapsible) ----------------------------------------------------- */
+.kit { display: block; width: 100%; }
+.kit > summary { list-style: none; cursor: pointer; }
+.kit > summary::-webkit-details-marker { display: none; }
+.kit-badge {
+	display: inline-flex; align-items: baseline; gap: 0.4em;
+	margin-top: 0.2em;
+	font-size: var(--t-xs); color: var(--muted);
+}
+.kit-badge .tri {
+	display: inline-block;
+	transition: transform 300ms var(--ease-out);
+	transform-origin: 40% 50%;
+}
+.kit[open] > summary .tri { transform: rotate(90deg); }
+.kit-items {
+	display: block;
+	padding-left: calc(var(--thumb, 3.6rem) + var(--s-2));
+	border-left: 1px solid var(--rule);
+	margin: 0 0 var(--s-1);
+	animation: kitOpen 0.35s var(--ease-out);
+}
+@keyframes kitOpen {
+	from { opacity: 0; transform: translate3d(0, -0.3rem, 0); }
+	to { opacity: 1; transform: none; }
+}
+.kit-items .tool-row {
+	--thumb: 2.4rem;
+	padding: 0.4rem 0;
+	grid-template-columns: var(--thumb) minmax(0, 6fr) minmax(0, 3fr) minmax(0, 7fr) 2.4rem;
+}
+.kit-items .tool-row:last-child { border-bottom-color: transparent; }
+
+/* 6. Empty + foot ----------------------------------------------------------- */
+.tools-empty {
+	padding: var(--s-4) 0;
+	border-top: 1px solid var(--rule-strong);
+	font-family: var(--serif); font-weight: 300;
+	font-size: var(--t-xl); color: var(--muted);
+}
+.tools-foot {
+	margin-top: var(--s-3);
+	max-width: 44rem;
+	font-size: var(--t-xs);
+	color: var(--muted);
+}
+
+/* 7. Mobile ----------------------------------------------------------------- */
+.mobile .tool-row {
+	--thumb: 3rem;
+	grid-template-columns: var(--thumb) minmax(0, 1fr) 2rem;
+	grid-template-areas:
+		"thumb name qty"
+		"thumb size size"
+		"thumb uses uses";
+	gap: 0.15rem var(--s-1);
+}
+.mobile .kit-items .tool-row { --thumb: 2.2rem; grid-template-columns: var(--thumb) minmax(0, 1fr) 2rem; }
+.mobile .tool-thumb { grid-area: thumb; }
+.mobile .tool-main { grid-area: name; }
+.mobile .tool-sizecol { grid-area: size; }
+.mobile .tool-usescol { grid-area: uses; }
+.mobile .tool-qty { grid-area: qty; }
+.mobile .kit-items { padding-left: var(--s-1); }
+.mobile .page-tools .page-content { padding-left: calc(var(--page-pad) * 0.8); padding-right: calc(var(--page-pad) * 0.8); }
+
+/* 7b. Internal index (/internal/) -------------------------------------------- */
+.page-internal .page-content { max-width: 80rem; }
+.internal-index { display: block; }
+.internal-row {
+	grid-template-columns: minmax(0, 3fr) minmax(0, 9fr) 2.4rem;
+	align-items: start;
+	color: inherit;
+	transition: background-color 150ms var(--ease-out);
+}
+.internal-row:hover { background-color: rgba(0, 0, 0, 0.035); }
+.internal-row:last-of-type { padding-bottom: var(--s-3); border-bottom: 1px solid var(--rule-strong); }
+.internal-row .row-body p { max-width: 36rem; }
+.internal-row .internal-meta { margin-top: 0.5em; font-size: var(--t-xs); color: var(--muted); }
+.internal-go { font-family: var(--serif); font-weight: 300; font-size: var(--t-l); text-align: right; line-height: 1.3; margin-top: -0.06em; }
+.internal-row:hover .arr { transform: translateX(0.28em); }
+.mobile .internal-row { grid-template-columns: 1fr; }
+.mobile .internal-go { display: none; }
+.tools-foot code { font-family: var(--sans); font-size: 0.95em; opacity: 0.85; }
+
+/* 8. Login (served by worker.js; a small window on the paper) ---------------- */
+.page-tools-login {
+	min-height: var(--viewport-height);
+	display: flex; align-items: center; justify-content: center;
+	padding: var(--page-pad);
+}
+.tools-login-win {
+	width: min(30rem, 100%);
+	padding: 0 1.4rem 1.4rem;
+}
+.tools-login-form .tools-login-intro { margin: 1.2rem 0 var(--s-3); color: var(--muted); font-size: var(--t-xs); }
+.tools-login-form .field { margin-bottom: var(--s-2); }
+.tools-login-actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s-2); margin-top: var(--s-3); }
+.tools-send {
+	display: inline-flex; align-items: center; height: var(--pill-h); min-height: 30px; padding: 0 1.1em;
+	border-radius: 999px; border: 1px solid var(--ink); background: var(--ink); color: var(--paper);
+	font-family: var(--sans); font-weight: 300; font-size: max(0.85rem, 13px); letter-spacing: 0.01em; line-height: 1;
+	cursor: pointer; transition: opacity 0.2s;
+}
+.tools-send:hover { opacity: 0.85; }
+.tools-send:focus-visible { outline: 1px solid var(--ink); outline-offset: 3px; }
+.tools-login-error { margin: 0; font-size: var(--t-xs); color: #b3261e; }
+.tools-login-page { background: linear-gradient(180deg, #f4f4f4 0%, #d9d9d9 55%, #b4b4b4 100%); }
+
+/* 9. Reduced motion ---------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+	.tool-thumb, .kit-badge .tri, .tools-chip { transition: none; }
+	.kit-items { animation: none; }
+}
+
+/* back pill under the login window; the bar reveal doesn't run here, so show it directly */
+.tools-login-page .page-tools-login { flex-direction: column; gap: var(--s-3); }
+.tools-login-page .tools-login-back { margin: 0; font-size: max(0.75rem, 12px); line-height: 1; }
+.tools-login-page .pill { opacity: 1; filter: none; text-decoration: none; }

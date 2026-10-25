@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Internal — Organised Mess</title>
+	<meta name="robots" content="noindex, nofollow">
+	<meta name="theme-color" content="#f2f2f2">
+	<link rel="icon" href="/assets/favicon.ico" sizes="16x16 32x32">
+	<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+	<link rel="preload" href="/fonts/ABCGaisyrEdu-Light.woff2" as="font" type="font/woff2" crossorigin>
+	<link rel="preload" href="/fonts/ABCDiatypeEdu-Thin.woff2" as="font" type="font/woff2" crossorigin>
+	<link rel="stylesheet" href="/css/site.css">
+	<link rel="stylesheet" href="/css/internal.css">
+	<script>
+	// base unit + mobile class: the same viewport-relative rem js/site.js computes for the home page
+	(function () {
+		var html = document.documentElement;
+		html.classList.add('js');
+		var portrait = window.matchMedia('(max-aspect-ratio: 4/5)');
+		var landscape = window.matchMedia('(min-aspect-ratio: 2/3) and (max-height: 500px)');
+		function apply() {
+			var w = html.clientWidth, h = window.innerHeight;
+			var mobile = portrait.matches || landscape.matches;
+			var l = h > w ? Math.min(1, (h / w - 1) / 0.777777778) : 0;
+			var f = (mobile && !portrait.matches) ? 18 : 9;
+			var side = Math.min(w, h), unit = Math.max(20, side / (100 / (f + 5 * l)));
+			html.style.setProperty('--base-size', (unit * 0.16) + 'px');
+			html.style.setProperty('--viewport-height', h + 'px');
+			html.classList.toggle('mobile', mobile);
+			if (document.body) document.body.classList.toggle('mobile', mobile);
+		}
+		apply();
+		window.addEventListener('resize', apply, { passive: true });
+		document.addEventListener('DOMContentLoaded', function () {
+			apply();
+			requestAnimationFrame(function () { document.body.classList.add('strips-in'); });
+		});
+	})();
+	</script>
+</head>
+<body class="internal">
+<a class="skip-link" href="#internal-main">Skip to content</a>
+
+<header class="bar bar-top bar-tools" id="header">
+	<a class="pill" href="/"><span class="arr arr-back">←</span>&nbsp;Back to the studio</a>
+	<a class="pill pill-logout" href="/internal/logout">Log out</a>
+</header>
+
+<main id="internal-main" class="page page-tools page-internal" tabindex="-1">
+	<div class="page-content">
+
+		<div class="tools-head">
+			<h1 class="tools-title">Internal</h1>
+			<p class="tools-meta">Studio-only pages. Not linked from the site, not indexed.</p>
+		</div>
+
+		<!-- One row per internal page. To add one: put it in a folder under site/internal/
+		     (the login covers everything under /internal) and add a row here. -->
+		<nav class="internal-index" aria-label="Internal pages">
+
+			<a class="row internal-row" href="/internal/tools/">
+				<div class="row-head">
+					<span class="num">01</span>
+					<h2 class="row-label">Tools</h2>
+				</div>
+				<div class="row-body">
+					<p>The workshop tool inventory — every tool, set and bit, searchable by name, size, connector or use, with photos and links to the product pages.</p>
+					<p class="internal-meta">304 pieces · 220 line items · 12 sets · 18 categories</p>
+				</div>
+				<span class="internal-go" aria-hidden="true"><span class="arr">→</span></span>
+			</a>
+
+			<!-- Template for the next page:
+			<a class="row internal-row" href="/internal/…/">
+				<div class="row-head">
+					<span class="num">02</span>
+					<h2 class="row-label">…</h2>
+				</div>
+				<div class="row-body">
+					<p>…</p>
+				</div>
+				<span class="internal-go" aria-hidden="true"><span class="arr">→</span></span>
+			</a>
+			-->
+
+		</nav>
+
+		<p class="tools-foot">More to come. Anything placed under <code>site/internal/</code> sits behind this login.</p>
+	</div>
+</main>
+
+</body>
+</html>

@@ -11,42 +11,51 @@ site/
 ├── js/backdrop.js      WebGL backdrops: liquid | rd | caustic (older slitscan.js / liquid.js kept, unused)
 ├── fonts/              ABC Diatype (Thin 200) + ABC Gaisyr (Light 300), woff2
 ├── assets/             slitscan source image, favicon, OG image
-├── tools/              internal workshop tool inventory — login required (see below)
-├── css/tools.css       /tools + its login page, on site.css's tokens and the Capabilities row grid
+├── internal/           studio-only pages behind one login (see below): index + tools/
+├── css/internal.css    /internal login, index and tools, on site.css's tokens and the Capabilities row grid
 ├── _redirects          /capabilities → index.html (200 rewrite)
 └── _headers            caching + security headers
 ```
 
-## /tools — internal inventory
+## /internal — pages behind a login
 
-`tools/index.html` renders every tool in the workshop from `tools/data/tools.json`
-(one record per line item) and `tools/data/kits.json` (set-level records), with
-product photos in `tools/img/`. Search matches name, brand, model, size, details,
-uses and tags; short or numeric terms match whole tokens ("tx 8" won't light up
-"80 mm"). Category chips filter; sets are collapsible rows — collapsed when the
-set's own description matches, open on just the matching items when its contents
-do. `?q=` and `?cat=` are shareable. `/` focuses the search box.
-
-**Updating:** re-export the inventory, replace `tools/data/*.json` and any new
-photos in `tools/img/`. The header stats are computed from the data; only the
-"Updated" date is a constant at the top of `tools/tools.js`.
-
-**Login:** `../worker.js` gates `/tools*` behind a username + password held in two
-Worker secrets, `TOOLS_USER` and `TOOLS_PASSWORD` (optional `TOOLS_SECRET`):
+Everything under `site/internal/` is served only after a login. `../worker.js` gates
+`/internal*` behind a username + password held in two Worker secrets,
+`INTERNAL_USER` and `INTERNAL_PASSWORD` (optional `INTERNAL_SECRET`):
 
 ```
-npx wrangler secret put TOOLS_USER
-npx wrangler secret put TOOLS_PASSWORD
+npx wrangler secret put INTERNAL_USER
+npx wrangler secret put INTERNAL_PASSWORD
 ```
 
-A good login sets a 30-day HttpOnly, HMAC-signed cookie scoped to `/tools`;
-`/tools/logout` clears it; changing either secret logs every session out. Protected
-responses are `no-store` and `noindex`. `../wrangler.jsonc` lists `/tools*` in
-`run_worker_first` — without that, Workers Static Assets would serve the files
-under `/tools` straight from the asset cache and skip the check. For local preview
-put the same two keys in `../.dev.vars` (gitignored) and run `npx wrangler dev`
-from the repo root. If more people ever need access, Cloudflare Access on `/tools*`
-is the upgrade: per-person email codes, and the gate in `worker.js` can go.
+A good login sets a 30-day HttpOnly, HMAC-signed cookie scoped to `/internal`;
+`/internal/logout` clears it; changing either secret logs every session out.
+Protected responses are `no-store` and `noindex`. `../wrangler.jsonc` lists
+`/internal*` in `run_worker_first` — without that, Workers Static Assets would serve
+the files straight from the asset cache and skip the check. For local preview put the
+same two keys in `../.dev.vars` (gitignored) and run `npx wrangler dev` from the repo
+root. If more people ever need access, Cloudflare Access on `/internal*` is the
+upgrade: per-person email codes, and the gate in `worker.js` can go.
+
+**Adding a page:** make a folder under `site/internal/` (e.g. `site/internal/notes/`)
+with its own `index.html` — copy the `<head>` from `internal/tools/index.html` for the
+base-unit script and stylesheets — and add a row to `site/internal/index.html` (there's
+a commented template). The login already covers it.
+
+### /internal/tools — workshop inventory
+
+`internal/tools/index.html` renders every tool in the workshop from
+`internal/tools/data/tools.json` (one record per line item) and `kits.json`
+(set-level records), with product photos in `internal/tools/img/`. Search matches
+name, brand, model, size, details, uses and tags; short or numeric terms match whole
+tokens ("tx 8" won't light up "80 mm"). Category chips filter; sets are collapsible
+rows — collapsed when the set's own description matches, open on just the matching
+items when its contents do. `?q=` and `?cat=` are shareable. `/` focuses the search box.
+The old address `/tools` redirects here.
+
+**Updating:** re-export the inventory, replace `internal/tools/data/*.json` and any new
+photos in `internal/tools/img/`. The header stats are computed from the data; only the
+"Updated" date is a constant at the top of `internal/tools/tools.js`.
 
 ## Local preview
 

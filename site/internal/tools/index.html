@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Tools — Organised Mess</title>
+	<meta name="robots" content="noindex, nofollow">
+	<meta name="theme-color" content="#f2f2f2">
+	<link rel="icon" href="/assets/favicon.ico" sizes="16x16 32x32">
+	<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+	<link rel="preload" href="/fonts/ABCGaisyrEdu-Light.woff2" as="font" type="font/woff2" crossorigin>
+	<link rel="preload" href="/fonts/ABCDiatypeEdu-Thin.woff2" as="font" type="font/woff2" crossorigin>
+	<link rel="stylesheet" href="/css/site.css">
+	<link rel="stylesheet" href="/css/internal.css">
+	<script>
+	// base unit + mobile class: the same viewport-relative rem js/site.js computes for the home page
+	(function () {
+		var html = document.documentElement;
+		html.classList.add('js');
+		var portrait = window.matchMedia('(max-aspect-ratio: 4/5)');
+		var landscape = window.matchMedia('(min-aspect-ratio: 2/3) and (max-height: 500px)');
+		function apply() {
+			var w = html.clientWidth, h = window.innerHeight;
+			var mobile = portrait.matches || landscape.matches;
+			var l = h > w ? Math.min(1, (h / w - 1) / 0.777777778) : 0;
+			var f = (mobile && !portrait.matches) ? 18 : 9;
+			var side = Math.min(w, h), unit = Math.max(20, side / (100 / (f + 5 * l)));
+			html.style.setProperty('--base-size', (unit * 0.16) + 'px');
+			html.style.setProperty('--viewport-height', h + 'px');
+			html.classList.toggle('mobile', mobile);
+			if (document.body) document.body.classList.toggle('mobile', mobile);
+		}
+		apply();
+		window.addEventListener('resize', apply, { passive: true });
+		document.addEventListener('DOMContentLoaded', function () {
+			apply();
+			requestAnimationFrame(function () { document.body.classList.add('strips-in'); });
+		});
+	})();
+	</script>
+</head>
+<body class="tools internal">
+<a class="skip-link" href="#tools-main">Skip to content</a>
+
+<header class="bar bar-top bar-tools" id="header">
+	<a class="pill" href="/internal/"><span class="arr arr-back">←</span>&nbsp;Internal</a>
+	<a class="pill pill-logout" href="/internal/logout">Log out</a>
+</header>
+
+<main id="tools-main" class="page page-tools" tabindex="-1">
+	<div class="page-content">
+
+		<div class="tools-head">
+			<h1 class="tools-title">Tools</h1>
+			<p class="tools-meta" id="tools-stats">Loading the inventory…</p>
+		</div>
+
+		<div class="tools-search">
+			<div class="tools-field">
+				<label class="sr-only" for="tools-q">Search the inventory</label>
+				<input id="tools-q" type="search" autocomplete="off" spellcheck="false" placeholder="JST XH, M2.5, TX 8, 20 AWG, tweezers…">
+				<button type="button" id="tools-clear" class="tools-clear" hidden aria-label="Clear search">×</button>
+			</div>
+			<div class="tools-chips" id="tools-chips" role="group" aria-label="Filter by category"></div>
+			<p class="tools-result" id="tools-result" role="status" aria-live="polite"></p>
+		</div>
+
+		<div id="tools-list" class="tools-list"></div>
+
+		<p class="tools-foot">Internal. Every item listed is owned. Sizes are from manufacturer specs where published; <em>(est.)</em> marks approximations. Links go to the official product page where one exists.</p>
+	</div>
+</main>
+
+<script src="/internal/tools/tools.js" defer></script>
+</body>
+</html>
