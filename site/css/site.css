@@ -369,7 +369,8 @@ a.pill:hover { background: rgba(255, 255, 255, 0.34); }
 /* 5. Home ------------------------------------------------------------------- */
 .page-home .page-content {
 	min-height: var(--viewport-height);
-	padding: calc(var(--clear-top) + var(--page-pad)) var(--page-pad) calc(max(var(--clear-bottom), var(--footer-height)) + var(--page-pad));
+	/* no header pill any more: the text starts at the same inset as the page edges */
+	padding: var(--page-pad) var(--page-pad) calc(max(var(--clear-bottom), var(--footer-height)) + var(--page-pad));
 }
 
 .intro {
