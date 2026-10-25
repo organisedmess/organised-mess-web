@@ -26,7 +26,7 @@
 	var API = '/internal/tools/api/state';
 
 	var DEFAULT_LOCATION = 'Isles Institute - Not Found';
-	var CONDITIONS = ['Not assessed', 'Good', 'Worn', 'Needs service', 'Broken', 'Missing'];
+	var CONDITIONS = ['Good', 'Worn', 'Needs service', 'Broken', 'Missing', 'Not assessed'];
 	var DEFAULT_CONDITION = CONDITIONS[0];
 
 	var $list = document.getElementById('tools-list');
@@ -67,22 +67,29 @@
 			try { store.data = JSON.parse(localStorage.getItem('om-tools-state') || '{}'); } catch (e) { store.data = {}; }
 		});
 	}
+	// patch: { location?, condition?, note? } — a note is appended, never replaced
 	function saveState(id, patch) {
 		var cur = store.data[id] || {};
 		var next = {};
 		for (var k in cur) next[k] = cur[k];
-		for (var p in patch) next[p] = patch[p];
+		if (patch.location !== undefined) next.location = patch.location;
+		if (patch.condition !== undefined) next.condition = patch.condition;
+		if (patch.note) next.notes = (cur.notes || []).concat([{ t: new Date().toISOString(), text: patch.note }]);
 		store.data[id] = next;
 		if (store.mode === 'kv') {
 			return fetch(API, {
 				method: 'PUT', credentials: 'same-origin',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ id: id, location: next.location, condition: next.condition })
-			}).then(function (r) { if (!r.ok) throw new Error('save failed (' + r.status + ')'); });
+				body: JSON.stringify({ id: id, location: patch.location, condition: patch.condition, note: patch.note })
+			}).then(function (r) {
+				if (!r.ok) throw new Error('save failed (' + r.status + ')');
+				return r.json();
+			}).then(function (j) { if (j && j.item) store.data[id] = j.item; });
 		}
 		try { localStorage.setItem('om-tools-state', JSON.stringify(store.data)); } catch (e) {}
 		return Promise.resolve();
 	}
+	function notesOf(t) { var s = store.data[t.id]; return (s && s.notes) || []; }
 	function locOf(t) { var s = store.data[t.id]; return (s && s.location) || DEFAULT_LOCATION; }
 	function condOf(t) { var s = store.data[t.id]; return (s && s.condition) || DEFAULT_CONDITION; }
 	function allLocations() {
@@ -108,8 +115,7 @@
 		model.cats = cats;
 
 		var kitCount = Object.keys(kits).length;
-		$stats.textContent = 'Workshop inventory \u00b7 ' + pieces + ' pieces \u00b7 ' + items.length +
-			' line items \u00b7 ' + kitCount + ' sets \u00b7 ' + cats.length + ' categories \u00b7 Updated ' + UPDATED;
+		$stats.textContent = 'Workshop inventory \u00b7 ' + pieces + ' pieces \u00b7 ' + kitCount + ' sets \u00b7 ' + cats.length + ' categories \u00b7 Updated ' + UPDATED;
 
 		cats.forEach(function (cat) {
 			var catItems = items.filter(function (t) { return t.cat === cat; });
@@ -137,11 +143,11 @@
 
 	// haystacks are built per render so location/condition edits are searchable at once
 	function hayItem(t) {
-		return norm([t.title, t.name, t.brand, t.model, t.size, t.detail, t.uses, (t.tags || []).join(' '), t.note, locOf(t), condOf(t)].join(' '));
+		return norm([t.title, t.name, t.brand, t.model, t.size, t.detail, t.uses, (t.tags || []).join(' '), t.note, locOf(t), condOf(t), notesOf(t).map(function (n) { return n.text; }).join(' ')].join(' '));
 	}
 	function hayKit(row) {
 		var kit = row.kit;
-		return norm([row.name, kit.title, kit.uses, (kit.tags || []).join(' '), kit.size, locOf(kit), condOf(kit)].join(' '));
+		return norm([row.name, kit.title, kit.uses, (kit.tags || []).join(' '), kit.size, locOf(kit), condOf(kit), notesOf(kit).map(function (n) { return n.text; }).join(' ')].join(' '));
 	}
 	function norm(s) {
 		return String(s || '').toLowerCase()
@@ -257,6 +263,7 @@
 		var uses = t.uses ? '<p class="tool-uses">' + hl(t.uses, ts) + '</p>' : '';
 
 		var metaBits = [];
+		if (t.of) metaBits.push('#' + t.nth + ' of ' + t.of);
 		if (isSub && t.model && t.model !== '\u2014') metaBits.push(hl(t.model, ts));
 		if (t.size) metaBits.push(hl(t.size, ts));
 		if (t.detail) metaBits.push(hl(t.detail, ts));
@@ -269,13 +276,12 @@
 			(t.official === false ? 'Product page' : 'Official page') + (part ? ' \u00b7 ' + esc(part[1]) : '') + '&nbsp;<span class="arr arr-ext">\u2197</span></a>' : '';
 
 		return '<div class="tool-row' + (isSub ? ' is-sub' : '') + '" data-id="' + esc(t.id) + '">' +
-			thumb(key, label) +
+			thumb(key, label, t.id) +
 			'<div class="tool-body">' +
-				'<h3 class="tool-name">' + head + '</h3>' +
+				'<h3 class="tool-name"><button type="button" class="tool-open" data-id="' + esc(t.id) + '">' + head + '</button></h3>' +
 				desc + uses + meta + tags +
 				'<div class="tool-tagline">' +
-					condChip(t) + (isSub ? '' : locChip(t)) +
-					'<span class="tag tag-qty">\u00d7 ' + (t.qty || 0) + '</span>' + link +
+					condChip(t) + (isSub ? '' : locChip(t)) + noteTag(t) + link +
 				'</div>' +
 			'</div>' +
 		'</div>';
@@ -295,12 +301,11 @@
 			(kit.official === false ? 'Product page' : 'Official page') + (part ? ' \u00b7 ' + esc(part[1]) : '') + '&nbsp;<span class="arr arr-ext">\u2197</span></a>' : '';
 
 		var html = '<details class="kit"' + (v.open ? ' open' : '') + '><summary>' +
-			'<div class="tool-row is-set" data-id="' + esc(kit.id) + '">' + thumb(kit.key, label) +
+			'<div class="tool-row is-set" data-id="' + esc(kit.id) + '">' + thumb(kit.key, label, kit.id) +
 			'<div class="tool-body">' +
-				'<h3 class="tool-name">' + heading(brandOf(row), label, ts) + '</h3>' +
+				'<h3 class="tool-name"><button type="button" class="tool-open" data-id="' + esc(kit.id) + '">' + heading(brandOf(row), label, ts) + '</button></h3>' +
 				uses + meta + tags +
-				'<div class="tool-tagline">' + badge + condChip(kit) + locChip(kit) +
-					'<span class="tag tag-qty">\u00d7 ' + row.pieces + '</span>' + link + '</div>' +
+				'<div class="tool-tagline">' + badge + condChip(kit) + locChip(kit) + noteTag(kit) + link + '</div>' +
 			'</div>' +
 			'</div></summary><div class="kit-items">';
 		v.subs.forEach(function (s) { html += rowHtml(s.item, true, ts); });
@@ -312,9 +317,13 @@
 		return first && first.brand !== '\u2014' ? first.brand : '';
 	}
 
+	function noteTag(t) {
+		var n = notesOf(t).length;
+		return n ? '<button type="button" class="tag tag-note tool-open" data-id="' + esc(t.id) + '" title="Open notes">\u270e ' + n + (n === 1 ? ' note' : ' notes') + '</button>' : '';
+	}
 	function condChip(t) {
 		var c = condOf(t);
-		var cls = 'tag tag-cond tag-edit' + (c === DEFAULT_CONDITION ? ' is-default' : '') + ' cond-' + slug(c);
+		var cls = 'tag tag-cond tag-edit cond-' + slug(c);
 		return '<button type="button" class="' + cls + '" data-edit="condition" data-id="' + esc(t.id) + '" title="Change condition">' + esc(c) + '</button>';
 	}
 	function locChip(t) {
@@ -324,11 +333,11 @@
 	}
 	function slug(s) { return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-'); }
 
-	// a thumbnail that opens the full cut-out on click; hidden if the file is missing
-	function thumb(key, label) {
+	// a thumbnail that opens the tool's detail window; hidden if the file is missing
+	function thumb(key, label, id) {
 		if (!key) return '<span class="tool-thumb-btn is-missing"></span>';
 		var src = IMG + esc(key) + '.webp';
-		return '<button type="button" class="tool-thumb-btn" data-src="' + src + '" data-label="' + esc(label) + '" aria-label="Enlarge: ' + esc(label) + '">' +
+		return '<button type="button" class="tool-thumb-btn tool-open" data-id="' + esc(id) + '" aria-label="Open: ' + esc(label) + '">' +
 			'<img class="tool-thumb" src="' + src + '" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.add(\'is-missing\')"></button>';
 	}
 
@@ -396,10 +405,8 @@
 	}
 	function commit(id, patch) {
 		closeEditor();
-		saveState(id, patch).then(function () {
-			render();
-		}).catch(function (err) {
-			render();
+		saveState(id, patch).then(refresh).catch(function (err) {
+			refresh();
 			if ($result) $result.textContent = 'Could not save: ' + err.message;
 		});
 	}
@@ -431,21 +438,24 @@
 			if (e.key === '/' && document.activeElement !== $q && !e.metaKey && !e.ctrlKey && !$pop) {
 				e.preventDefault(); $q.focus(); $q.select();
 			}
-			if (e.key === 'Escape' && $pop) closeEditor();
+			if (e.key === 'Escape') {
+				if ($pop) closeEditor();
+				else if ($detail && !$detail.hidden) closeDetail();
+			}
 		});
 		window.addEventListener('popstate', function () { readUrl(); $q.value = state.q; render(); });
 
 		// capture phase: chips, thumbs, links and the editor inside a <summary> must not toggle the set
 		$list.addEventListener('click', function (e) {
-			var hit = e.target.closest('.tool-pop, .tag-edit, .tool-thumb-btn, a');
+			var hit = e.target.closest('.tool-pop, .tag-edit, .tool-open, a');
 			if (hit && e.target.closest('summary')) e.preventDefault();
 		}, true);
 
 		$list.addEventListener('click', function (e) {
-			var th = e.target.closest('.tool-thumb-btn');
-			if (th) {
+			var op = e.target.closest('.tool-open');
+			if (op) {
 				e.stopPropagation();
-				openZoom(th.getAttribute('data-src'), th.getAttribute('data-label'), th);
+				openDetail(op.getAttribute('data-id'), op);
 				return;
 			}
 			var ed = e.target.closest('.tag-edit');
@@ -459,35 +469,116 @@
 			if ($pop && !$pop.contains(e.target) && !(popFor && popFor.contains(e.target))) closeEditor();
 		});
 	}
+	// after a save, re-render the list and refresh the detail window if it's open
+	function refresh() {
+		render();
+		if ($detail && !$detail.hidden && detailId) { fillDetail(detailId); $detail.querySelector('.os-win').focus(); }
+	}
 
-	/* ---- zoom ------------------------------------------------------------- */
-	var $zoom = null, zoomFrom = null;
-	function openZoom(src, label, from) {
-		if (!$zoom) {
-			$zoom = document.createElement('div');
-			$zoom.className = 'tool-zoom';
-			$zoom.innerHTML = '<div class="os-win tool-zoom-win" role="dialog" aria-modal="true" aria-labelledby="tool-zoom-title" tabindex="-1">' +
-				'<div class="os-titlebar"><button type="button" class="os-dot" aria-label="Close"></button><span class="os-title" id="tool-zoom-title"></span><span class="os-meta">Photo</span></div>' +
-				'<div class="tool-zoom-body"><img alt=""></div></div>';
-			document.body.appendChild($zoom);
-			$zoom.addEventListener('click', function (e) {
-				if (e.target === $zoom || e.target.closest('.os-dot')) closeZoom();
-			});
-			document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$zoom.hidden) closeZoom(); });
-		}
-		zoomFrom = from;
-		$zoom.querySelector('img').src = src;
-		$zoom.querySelector('img').alt = label;
-		$zoom.querySelector('#tool-zoom-title').textContent = label;
-		$zoom.hidden = false;
+	/* ---- detail window ---------------------------------------------------- */
+	var $detail = null, detailId = null, detailFrom = null;
+	function ensureDetail() {
+		if ($detail) return;
+		$detail = document.createElement('div');
+		$detail.className = 'tool-detail';
+		$detail.innerHTML = '<div class="os-win tool-detail-win" role="dialog" aria-modal="true" aria-labelledby="tool-detail-title" tabindex="-1">' +
+			'<div class="os-titlebar"><button type="button" class="os-dot" aria-label="Close"></button><span class="os-title" id="tool-detail-title"></span><span class="os-meta" id="tool-detail-meta"></span></div>' +
+			'<div class="tool-detail-body"></div></div>';
+		document.body.appendChild($detail);
+		$detail.addEventListener('click', function (e) {
+			if (e.target === $detail || e.target.closest('.os-dot')) { closeDetail(); return; }
+			var ed = e.target.closest('.tag-edit');
+			if (ed) { e.stopPropagation(); if (popFor === ed) closeEditor(); else openEditor(ed); return; }
+			var img = e.target.closest('.tool-detail-photo');
+			if (img) { img.classList.toggle('is-big'); return; }
+			if (e.target.closest('.tool-note-add')) { addNote(); }
+		});
+		$detail.addEventListener('keydown', function (e) {
+			if (e.key === 'Escape' && !$pop) { e.stopPropagation(); closeDetail(); }
+			if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && e.target.classList.contains('tool-note-input')) { e.preventDefault(); addNote(); }
+		});
+	}
+	function openDetail(id, from) {
+		ensureDetail();
+		detailId = id; detailFrom = from;
+		fillDetail(id);
+		$detail.hidden = false;
 		document.body.classList.add('no-scroll');
-		$zoom.querySelector('.os-win').focus();
+		$detail.querySelector('.os-win').focus();
 	}
-	function closeZoom() {
-		$zoom.hidden = true;
+	function closeDetail() {
+		closeEditor();
+		$detail.hidden = true;
 		document.body.classList.remove('no-scroll');
-		if (zoomFrom) zoomFrom.focus();
+		if (detailFrom && detailFrom.focus) detailFrom.focus();
 	}
+	function fillDetail(id) {
+		var t = model.byId[id];
+		if (!t) return;
+		var isKit = !!(t.key && model.kits[Object.keys(model.kits).filter(function (n) { return model.kits[n] === t; })[0]]) && !t.cat;
+		var kitName = isKit ? Object.keys(model.kits).filter(function (n) { return model.kits[n] === t; })[0] : '';
+		var label = isKit ? (t.title || kitName) : (t.title || t.name);
+		var brand = isKit ? brandOfKit(kitName) : t.brand;
+		var key = t.key || t.pkey;
+		var cat = isKit ? catOfKit(kitName) : t.cat;
+
+		$detail.querySelector('#tool-detail-title').innerHTML = heading(brand, label, []);
+		$detail.querySelector('#tool-detail-meta').textContent = cat || '';
+
+		var facts = [];
+		if (!isKit && t.title) facts.push(['Description', t.name]);
+		if (!isKit && t.kit) facts.push(['Part of', model.kits[t.kit].title || t.kit]);
+		if (t.model && t.model !== '—') facts.push(['Model', t.model]);
+		if (t.size) facts.push(['Size', t.size]);
+		if (t.detail) facts.push(['Details', t.detail]);
+		if (t.of) facts.push(['Piece', '#' + t.nth + ' of ' + t.of]);
+		if (t.note) facts.push(['Note', t.note]);
+		if (t.tags && t.tags.length) facts.push(['Tags', t.tags.join(' · ')]);
+		if (isKit) facts.push(['Contents', countSubs(kitName) + ' items']);
+
+		var link = t.url ? '<a class="tag tag-link" href="' + esc(t.url) + '" target="_blank" rel="noopener">' + (t.official === false ? 'Product page' : 'Official page') + '&nbsp;<span class="arr arr-ext">↗</span></a>' : '';
+		var notes = notesOf(t);
+		var notesHtml = notes.length ? notes.slice().reverse().map(function (n) {
+			return '<li><span class="tool-note-when">' + esc(fmtDate(n.t)) + '</span><span class="tool-note-text">' + esc(n.text) + '</span></li>';
+		}).join('') : '<li class="tool-note-empty">No notes yet.</li>';
+
+		$detail.querySelector('.tool-detail-body').innerHTML =
+			'<div class="tool-detail-media">' + (key ? '<img class="tool-detail-photo" src="' + IMG + esc(key) + '.webp" alt="' + esc(label) + '" title="Click to enlarge">' : '') + '</div>' +
+			'<div class="tool-detail-text">' +
+				(t.uses ? '<p class="tool-detail-uses">' + esc(t.uses) + '</p>' : '') +
+				'<dl class="tool-facts">' + facts.map(function (f) { return '<dt>' + esc(f[0]) + '</dt><dd>' + esc(f[1]) + '</dd>'; }).join('') + '</dl>' +
+				'<div class="tool-tagline">' + condChip(t) + (t.kit ? '' : locChip(t)) + link + '</div>' +
+				(t.kit ? '<p class="tool-detail-hint">Location follows the set.</p>' : '') +
+				'<section class="tool-notes"><h4>Notes</h4><ul class="tool-note-list">' + notesHtml + '</ul>' +
+					'<div class="tool-note-form"><textarea class="tool-note-input" rows="3" placeholder="Add a note — what it’s for, what’s wrong, where the spare parts are…"></textarea>' +
+					'<div class="tool-note-actions"><button type="button" class="tool-note-add tools-send">Add note&nbsp;<span class="arr">→</span></button>' +
+					'<span class="tool-note-hint">' + (store.mode === 'local' ? 'Saved in this browser only until KV is set up.' : '⌘⏎ to add') + '</span></div></div>' +
+				'</section>' +
+			'</div>';
+	}
+	function addNote() {
+		var ta = $detail.querySelector('.tool-note-input');
+		var text = ta.value.trim();
+		if (!text) { ta.focus(); return; }
+		var btn = $detail.querySelector('.tool-note-add'); btn.disabled = true;
+		saveState(detailId, { note: text }).then(function () { refresh(); }).catch(function (err) {
+			refresh(); if ($result) $result.textContent = 'Could not save the note: ' + err.message;
+		});
+	}
+	function fmtDate(iso) {
+		var d = new Date(iso);
+		if (isNaN(d)) return '';
+		return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) + ' · ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+	}
+	function brandOfKit(name) {
+		var first = model.items.filter(function (t) { return t.kit === name; })[0];
+		return first && first.brand !== '—' ? first.brand : '';
+	}
+	function catOfKit(name) {
+		var first = model.items.filter(function (t) { return t.kit === name; })[0];
+		return first ? first.cat : '';
+	}
+	function countSubs(name) { return model.items.filter(function (t) { return t.kit === name; }).length; }
 
 	/* ---- url -------------------------------------------------------------- */
 	function readUrl() {

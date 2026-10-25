@@ -345,11 +345,11 @@ function internalLogin(next, error, status) {
 }
 
 /* ---- /internal/tools/api/state: per-tool location + condition in KV --------- */
-// GET  → { items: { [id]: { location, condition, updated } } }
-// PUT  { id, location?, condition? } → merges that one entry
+// GET  → { items: { [id]: { location, condition, notes: [{t, text}], updated } } }
+// PUT  { id, location?, condition?, note? } → merges that one entry; a note is appended with a timestamp
 
 const STATE_KEY = 'tools-state-v1';
-const CONDITIONS = ['Not assessed', 'Good', 'Worn', 'Needs service', 'Broken', 'Missing'];
+const CONDITIONS = ['Good', 'Worn', 'Needs service', 'Broken', 'Missing', 'Not assessed'];
 
 async function toolsState(request, env) {
 	if (!env.TOOLS_KV) return json({ error: 'TOOLS_KV binding not configured' }, 503);
@@ -368,6 +368,11 @@ async function toolsState(request, env) {
 		if (body.condition !== undefined) {
 			if (!CONDITIONS.includes(body.condition)) return json({ error: 'bad condition' }, 400);
 			cur.condition = body.condition;
+		}
+		if (body.note !== undefined) {
+			const text = String(body.note).trim().slice(0, 2000);
+			if (!text) return json({ error: 'empty note' }, 400);
+			cur.notes = (cur.notes || []).concat([{ t: new Date().toISOString(), text }]).slice(-200);
 		}
 		cur.updated = new Date().toISOString();
 		items[id] = cur;

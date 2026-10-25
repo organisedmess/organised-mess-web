@@ -16,12 +16,24 @@
 		// /internal is login-gated in worker.js, so its files must not be served straight from the
 		// asset cache; everything else still skips the Worker when a static file matches.
 		// (/tools is the old address of the inventory; the Worker redirects it.)
-		"run_worker_first": ["/internal", "/internal/*", "/tools", "/tools/*"]
+		"run_worker_first": [
+			"/internal",
+			"/internal/*",
+			"/tools",
+			"/tools/*"
+		]
 	},
 	// outbound email: SMTP to Google Workspace from the Worker, as GMAIL_USER. Secrets set in the
 	// dashboard (never here): GMAIL_APP_PASSWORD, TURNSTILE_SECRET.
 	"vars": {
 		"GMAIL_USER": "matthew@organisedmess.studio",
 		"CONTACT_TO": "matthew@organisedmess.studio"
-	}
+	},
+	"kv_namespaces": [
+		{
+			"binding": "TOOLS_KV",
+			"id": "042433a2ee98480f948c82b3ff607a2f",
+			"remote": true
+		}
+	]
 }

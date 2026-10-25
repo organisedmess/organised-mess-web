@@ -53,8 +53,15 @@ rows — collapsed when the set's own description matches, open on just the matc
 items when its contents do. `?q=` and `?cat=` are shareable. `/` focuses the search box.
 The old address `/tools` redirects here.
 
+**Rows are physical pieces.** A record with quantity 3 becomes three rows (`id` suffixed `-1`,
+`-2`, `-3`, meta shows "#2 of 3") so each can carry its own condition and notes.
+
+**Details + notes:** click a tool's photo or name for its window — full meta, the condition and
+location chips, and an append-only notes log (timestamped; ⌘↵ to add). Notes are not shown on the
+list, only a "✎ N notes" tag; they are searchable.
+
 **Location + condition:** every row carries a location chip (default "Isles Institute - Not
-Found") and a condition chip (Not assessed / Good / Worn / Needs service / Broken / Missing).
+Found") and a condition chip (Good by default; Worn / Needs service / Broken / Missing / Not assessed).
 Click either to change it; sets carry both, items inside a set carry condition only. Edits are
 stored as overrides keyed by the row's `id` through `/internal/tools/api/state` in `../worker.js`,
 which needs a KV namespace:
