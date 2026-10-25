@@ -64,14 +64,10 @@ list, only a "✎ N notes" tag; they are searchable.
 Found") and a condition chip (Good by default; Worn / Needs service / Broken / Missing / Not assessed).
 Click either to change it; sets carry both, items inside a set carry condition only. Edits are
 stored as overrides keyed by the row's `id` through `/internal/tools/api/state` in `../worker.js`,
-which needs a KV namespace:
-
-```
-npx wrangler kv namespace create TOOLS_KV      # then paste the id into wrangler.jsonc (kv_namespaces)
-```
-
-Until that binding exists the page saves edits in the browser's localStorage and says so under
-the search box. Location and condition are searchable ("not found", "shelf a", "broken").
+which stores them in the `TOOLS_KV` namespace bound in `../wrangler.jsonc` (one JSON blob under
+the key `tools-state-v1`). If the binding is ever missing the page falls back to the browser's
+localStorage and says so under the search box. Location and condition are searchable
+("not found", "shelf a", "broken").
 
 **Updating:** re-export the inventory, replace `internal/tools/data/*.json` and run new photos
 through `tools/cutout.py` into `internal/tools/img/` (keys match the `key`/`pkey` fields). Loose

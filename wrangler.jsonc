@@ -5,10 +5,6 @@
 	"name": "organised-mess-web",
 	"main": "worker.js",
 	"compatibility_date": "2026-10-01",
-	// Tool locations + conditions live in a KV namespace. Create it once and paste the id here:
-	//   npx wrangler kv namespace create TOOLS_KV
-	// Until the block below is live the /internal/tools page saves edits in the browser only.
-	// "kv_namespaces": [{ "binding": "TOOLS_KV", "id": "PASTE_THE_ID_HERE" }],
 	"assets": {
 		"directory": "./site",
 		"binding": "ASSETS",
@@ -29,6 +25,7 @@
 		"GMAIL_USER": "matthew@organisedmess.studio",
 		"CONTACT_TO": "matthew@organisedmess.studio"
 	},
+	// TOOLS_KV: /internal/tools locations, conditions and notes (worker.js → /internal/tools/api/state)
 	"kv_namespaces": [
 		{
 			"binding": "TOOLS_KV",
