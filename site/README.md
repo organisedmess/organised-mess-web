@@ -53,6 +53,19 @@ rows — collapsed when the set's own description matches, open on just the matc
 items when its contents do. `?q=` and `?cat=` are shareable. `/` focuses the search box.
 The old address `/tools` redirects here.
 
+**Location + condition:** every row carries a location chip (default "Isles Institute - Not
+Found") and a condition chip (Not assessed / Good / Worn / Needs service / Broken / Missing).
+Click either to change it; sets carry both, items inside a set carry condition only. Edits are
+stored as overrides keyed by the row's `id` through `/internal/tools/api/state` in `../worker.js`,
+which needs a KV namespace:
+
+```
+npx wrangler kv namespace create TOOLS_KV      # then paste the id into wrangler.jsonc (kv_namespaces)
+```
+
+Until that binding exists the page saves edits in the browser's localStorage and says so under
+the search box. Location and condition are searchable ("not found", "shelf a", "broken").
+
 **Updating:** re-export the inventory, replace `internal/tools/data/*.json` and run new photos
 through `tools/cutout.py` into `internal/tools/img/` (keys match the `key`/`pkey` fields). Loose
 items carry a `title` (the product name shown as the row heading; `name` becomes the description). The header stats are computed from the data; only the

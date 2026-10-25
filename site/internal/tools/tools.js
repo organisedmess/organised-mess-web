@@ -1,9 +1,15 @@
 /*
  * organisedmess.studio — /internal/tools
  * Renders the workshop inventory from /internal/tools/data/tools.json + kits.json.
- * Search matches name, brand, model, size, detail, uses and tags. A set shows
- * collapsed when its own description matches, or open on just the matching
- * items when they do — so a connector name finds the kit, a screw size the bit.
+ *
+ * Search matches brand, name, model, size, detail, uses, tags, location and
+ * condition. A set shows collapsed when its own description matches, or open
+ * on just the matching items when they do.
+ *
+ * Location and condition are editable per row (click the chip). They are
+ * stored as overrides keyed by the row's `id`, through the Worker's
+ * /internal/tools/api/state (Cloudflare KV); if that isn't wired up yet the
+ * page falls back to this browser's localStorage and says so.
  */
 (function () {
 	'use strict';
@@ -12,10 +18,16 @@
 		'Screwdrivers & bits', 'Ratchets & sockets', 'Hex keys', 'Power tools',
 		'Crimpers', 'Strippers', 'Cutters & shears', 'Pliers', 'Tweezers',
 		'Soldering', 'Desoldering', 'Soldering aids', 'Fume extraction',
-		'Workholding', 'Wire wrap', 'Testing & measuring', '3D printing', 'Laser cutting', 'Cleaning'
+		'Workholding', 'Wire wrap', 'Testing & measuring', '3D printing', 'Laser cutting',
+		'Workstation', 'Cleaning'
 	];
 	var UPDATED = '25 Oct 2026';
 	var IMG = '/internal/tools/img/';
+	var API = '/internal/tools/api/state';
+
+	var DEFAULT_LOCATION = 'Isles Institute - Not Found';
+	var CONDITIONS = ['Not assessed', 'Good', 'Worn', 'Needs service', 'Broken', 'Missing'];
+	var DEFAULT_CONDITION = CONDITIONS[0];
 
 	var $list = document.getElementById('tools-list');
 	var $stats = document.getElementById('tools-stats');
@@ -23,13 +35,16 @@
 	var $q = document.getElementById('tools-q');
 	var $clear = document.getElementById('tools-clear');
 	var $result = document.getElementById('tools-result');
+	var $note = document.getElementById('tools-note');
 
-	var model = { cats: [], items: [], kits: {}, rows: [] };
+	var model = { cats: [], items: [], kits: {}, rows: [], byId: {} };
 	var state = { q: '', cat: null };
+	var store = { data: {}, mode: 'loading' }; // mode: 'kv' | 'local' | 'loading'
 
 	Promise.all([
 		fetch('/internal/tools/data/tools.json').then(function (r) { return r.json(); }),
-		fetch('/internal/tools/data/kits.json').then(function (r) { return r.json(); })
+		fetch('/internal/tools/data/kits.json').then(function (r) { return r.json(); }),
+		loadState()
 	]).then(function (res) {
 		build(res[0], res[1]);
 		readUrl();
@@ -39,7 +54,45 @@
 		$stats.textContent = 'Could not load the inventory (' + err.message + ').';
 	});
 
-	/* ------------------------------------------------------------------ */
+	/* ---- state: location + condition overrides ------------------------ */
+	function loadState() {
+		return fetch(API, { credentials: 'same-origin' }).then(function (r) {
+			if (!r.ok) throw new Error('no api');
+			return r.json();
+		}).then(function (j) {
+			store.data = j && j.items || {};
+			store.mode = 'kv';
+		}).catch(function () {
+			store.mode = 'local';
+			try { store.data = JSON.parse(localStorage.getItem('om-tools-state') || '{}'); } catch (e) { store.data = {}; }
+		});
+	}
+	function saveState(id, patch) {
+		var cur = store.data[id] || {};
+		var next = {};
+		for (var k in cur) next[k] = cur[k];
+		for (var p in patch) next[p] = patch[p];
+		store.data[id] = next;
+		if (store.mode === 'kv') {
+			return fetch(API, {
+				method: 'PUT', credentials: 'same-origin',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ id: id, location: next.location, condition: next.condition })
+			}).then(function (r) { if (!r.ok) throw new Error('save failed (' + r.status + ')'); });
+		}
+		try { localStorage.setItem('om-tools-state', JSON.stringify(store.data)); } catch (e) {}
+		return Promise.resolve();
+	}
+	function locOf(t) { var s = store.data[t.id]; return (s && s.location) || DEFAULT_LOCATION; }
+	function condOf(t) { var s = store.data[t.id]; return (s && s.condition) || DEFAULT_CONDITION; }
+	function allLocations() {
+		var set = {};
+		set[DEFAULT_LOCATION] = true;
+		for (var id in store.data) if (store.data[id].location) set[store.data[id].location] = true;
+		return Object.keys(set).sort();
+	}
+
+	/* ---- model ------------------------------------------------------------ */
 	function build(items, kits) {
 		model.items = items;
 		model.kits = kits;
@@ -48,16 +101,16 @@
 		items.forEach(function (t) {
 			pieces += t.qty || 0;
 			catSet[t.cat] = true;
+			model.byId[t.id] = t;
 		});
 		var cats = CATEGORY_ORDER.filter(function (c) { return catSet[c]; });
 		Object.keys(catSet).forEach(function (c) { if (cats.indexOf(c) < 0) cats.push(c); });
 		model.cats = cats;
 
 		var kitCount = Object.keys(kits).length;
-		$stats.textContent = 'Workshop inventory · ' + pieces + ' pieces · ' + items.length +
-			' line items · ' + kitCount + ' sets · ' + cats.length + ' categories · Updated ' + UPDATED;
+		$stats.textContent = 'Workshop inventory \u00b7 ' + pieces + ' pieces \u00b7 ' + items.length +
+			' line items \u00b7 ' + kitCount + ' sets \u00b7 ' + cats.length + ' categories \u00b7 Updated ' + UPDATED;
 
-		// one "row" per loose item or per set, grouped under its category
 		cats.forEach(function (cat) {
 			var catItems = items.filter(function (t) { return t.cat === cat; });
 			var loose = catItems.filter(function (t) { return !t.kit; });
@@ -66,27 +119,29 @@
 				if (t.kit && kitNames.indexOf(t.kit) < 0) kitNames.push(t.kit);
 			});
 			var rows = [];
-			loose.forEach(function (t) {
-				rows.push({ type: 'item', cat: cat, item: t, hay: haystack(t) });
-			});
+			loose.forEach(function (t) { rows.push({ type: 'item', cat: cat, item: t }); });
 			kitNames.forEach(function (name) {
 				var kit = kits[name] || {};
+				kit.id = kit.id || kit.key || name;
+				model.byId[kit.id] = kit;
 				var sub = catItems.filter(function (t) { return t.kit === name; });
-				var subRows = sub.map(function (t) {
-					return { type: 'sub', item: t, hay: haystack(t) };
-				});
 				rows.push({
-					type: 'kit', cat: cat, name: name, kit: kit, subs: subRows,
-					hay: norm([name, kit.title, kit.uses, (kit.tags || []).join(' '), kit.size].join(' ')),
+					type: 'kit', cat: cat, name: name, kit: kit,
+					subs: sub.map(function (t) { return { type: 'sub', item: t }; }),
 					pieces: sub.reduce(function (n, t) { return n + (t.qty || 0); }, 0)
 				});
 			});
-			model.rows.push({ cat: cat, rows: rows, pieces: catItems.reduce(function (n, t) { return n + (t.qty || 0); }, 0) });
+			model.rows.push({ cat: cat, rows: rows });
 		});
 	}
 
-	function haystack(t) {
-		return norm([t.title, t.name, t.brand, t.model, t.size, t.detail, t.uses, (t.tags || []).join(' '), t.note].join(' '));
+	// haystacks are built per render so location/condition edits are searchable at once
+	function hayItem(t) {
+		return norm([t.title, t.name, t.brand, t.model, t.size, t.detail, t.uses, (t.tags || []).join(' '), t.note, locOf(t), condOf(t)].join(' '));
+	}
+	function hayKit(row) {
+		var kit = row.kit;
+		return norm([row.name, kit.title, kit.uses, (kit.tags || []).join(' '), kit.size, locOf(kit), condOf(kit)].join(' '));
 	}
 	function norm(s) {
 		return String(s || '').toLowerCase()
@@ -95,7 +150,7 @@
 			.replace(/\s+/g, ' ');
 	}
 
-	/* ------------------------------------------------------------------ */
+	/* ---- search ----------------------------------------------------------- */
 	function terms() {
 		return norm(state.q).split(' ').filter(Boolean);
 	}
@@ -103,7 +158,8 @@
 	// token, otherwise "8" would light up every "80 mm" and "800 mAh"
 	function termRe(t) {
 		var e = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-		return new RegExp((/^[a-z0-9.]{1,3}$/.test(t) ? '(^|[^a-z0-9.])' : '') + e + (/^[a-z0-9.]{1,3}$/.test(t) ? '($|[^a-z0-9.])' : ''));
+		var short = /^[a-z0-9.]{1,3}$/.test(t);
+		return new RegExp((short ? '(^|[^a-z0-9.])' : '') + e + (short ? '($|[^a-z0-9.])' : ''));
 	}
 	var reCache = {};
 	function matches(hay, ts) {
@@ -114,6 +170,7 @@
 		return true;
 	}
 
+	/* ---- render ----------------------------------------------------------- */
 	function render() {
 		var ts = terms();
 		var searching = ts.length > 0;
@@ -125,10 +182,10 @@
 			var visible = [];
 			sec.rows.forEach(function (row) {
 				if (row.type === 'item') {
-					if (!searching || matches(row.hay, ts)) visible.push({ row: row });
+					if (!searching || matches(hayItem(row.item), ts)) visible.push({ row: row });
 				} else {
-					var kitHit = !searching || matches(row.hay, ts);
-					var subHits = searching ? row.subs.filter(function (s) { return matches(s.hay, ts); }) : row.subs;
+					var kitHit = !searching || matches(hayKit(row), ts);
+					var subHits = searching ? row.subs.filter(function (s) { return matches(hayItem(s.item), ts); }) : row.subs;
 					// a set shows when its own description matches (collapsed, all
 					// items) or when some of its items match (open, just those)
 					if (kitHit || subHits.length) {
@@ -155,18 +212,17 @@
 				'<span class="cat-count">' + secPieces + (secPieces === 1 ? ' piece' : ' pieces') + '</span></div>' +
 				'<div class="row-body"><div class="tool-rows">';
 			visible.forEach(function (v) {
-				html += v.row.type === 'item' ? rowHtml(v.row.item, null, ts) : kitHtml(v, ts);
+				html += v.row.type === 'item' ? rowHtml(v.row.item, false, ts) : kitHtml(v, ts);
 			});
 			html += '</div></div></section>';
 		});
 
 		if (!html) {
-			html = '<div class="tools-empty">Nothing matches “' + esc(state.q) + '”' +
+			html = '<div class="tools-empty">Nothing matches \u201c' + esc(state.q) + '\u201d' +
 				(state.cat ? ' in ' + esc(state.cat) : '') + '.</div>';
 		}
 		$list.innerHTML = html;
 
-		// chips
 		var chipHtml = '<button type="button" class="tools-chip" data-cat="" aria-pressed="' + (!state.cat) + '">All</button>';
 		model.cats.forEach(function (c) {
 			var n = counts[c] || 0;
@@ -178,72 +234,105 @@
 
 		$clear.hidden = !state.q;
 		$result.textContent = searching || state.cat
-			? (shownRows ? shownRows + (shownRows === 1 ? ' entry' : ' entries') + ' · ' + shownPieces + (shownPieces === 1 ? ' piece' : ' pieces') : 'No matches')
+			? (shownRows ? shownRows + (shownRows === 1 ? ' entry' : ' entries') + ' \u00b7 ' + shownPieces + (shownPieces === 1 ? ' piece' : ' pieces') : 'No matches')
 			: '';
+		if ($note) $note.hidden = store.mode !== 'local';
 		writeUrl();
 	}
 
-	function rowHtml(t, parentKit, ts) {
+	// "Brand | Product" heading: title minus the brand where the title starts with it
+	function heading(brand, full, ts) {
+		brand = (brand && brand !== '\u2014') ? brand : '';
+		var rest = full;
+		if (brand && full.toLowerCase().indexOf(brand.toLowerCase() + ' ') === 0) rest = full.slice(brand.length + 1);
+		return (brand ? '<span class="tool-brand-name">' + hl(brand, ts) + '</span><span class="tool-sep" aria-hidden="true"></span>' : '') +
+			'<span class="tool-product">' + hl(rest, ts) + '</span>';
+	}
+
+	function rowHtml(t, isSub, ts) {
 		var key = t.key || t.pkey;
 		var label = t.title || t.name;
-		var img = thumb(key, label);
-		var brand = [t.brand, t.model].filter(function (s) { return s && s !== '—'; }).join(' ');
-		// titled (loose) items: the title already names the product, so this line is the page link and,
-		// where the model carries a part number the title dropped, that number
-		var text = brand;
-		if (t.title) {
-			var extra = /\(([^)]+)\)/.exec(t.model || '');
-			text = extra ? extra[1] : '';
-		}
-		var linkText = t.title ? (t.official === false ? 'Product page' : 'Official page') : hl(brand, ts);
-		var link = t.url ? (text ? hl(text, ts) + ' \u00b7 ' : '') + '<a href="' + esc(t.url) + '" target="_blank" rel="noopener">' + linkText + '&nbsp;<span class="arr arr-ext">\u2197</span></a>' : hl(text, ts);
-		var size = t.size ? hl(t.size, ts) : '';
-		var detail = t.detail ? '<span class="tool-detail">' + hl(t.detail, ts) + '</span>' : '';
-		var uses = t.uses ? hl(t.uses, ts) : '';
-		var tags = (t.tags && t.tags.length) ? '<span class="tool-tags">' + t.tags.map(function (g) { return '<span>' + hl(g, ts) + '</span>'; }).join('') + '</span>' : '';
-		var note = t.note ? '<span class="tool-detail">' + hl(t.note, ts) + '</span>' : '';
+		var head = isSub ? heading(t.brand, t.name, ts) : heading(t.brand, label, ts);
+		var desc = (!isSub && t.title) ? '<p class="tool-desc">' + hl(t.name, ts) + '</p>' : '';
+		var uses = t.uses ? '<p class="tool-uses">' + hl(t.uses, ts) + '</p>' : '';
 
-		var desc = t.title ? '<span class="tool-desc">' + hl(t.name, ts) + '</span>' : '';
-		return '<div class="tool-row">' + img +
-			'<div class="tool-main"><p class="tool-name">' + hl(label, ts) + '</p>' + desc + '<span class="tool-brand">' + link + '</span></div>' +
-			'<div class="tool-sizecol"><span class="tool-size">' + size + '</span>' + detail + note + '</div>' +
-			'<div class="tool-usescol"><span class="tool-uses">' + uses + '</span>' + tags + '</div>' +
-			'<span class="tool-qty">' + (t.qty || 0) + '</span>' +
-			'</div>';
+		var metaBits = [];
+		if (isSub && t.model && t.model !== '\u2014') metaBits.push(hl(t.model, ts));
+		if (t.size) metaBits.push(hl(t.size, ts));
+		if (t.detail) metaBits.push(hl(t.detail, ts));
+		if (t.note) metaBits.push(hl(t.note, ts));
+		var meta = metaBits.length ? '<p class="tool-meta">' + metaBits.join(' \u00b7 ') + '</p>' : '';
+		var tags = (t.tags && t.tags.length) ? '<p class="tool-tags">' + t.tags.map(function (g) { return '<span>' + hl(g, ts) + '</span>'; }).join('') + '</p>' : '';
+
+		var part = /\(([^)]+)\)/.exec(t.model || '');
+		var link = t.url ? '<a class="tag tag-link" href="' + esc(t.url) + '" target="_blank" rel="noopener">' +
+			(t.official === false ? 'Product page' : 'Official page') + (part ? ' \u00b7 ' + esc(part[1]) : '') + '&nbsp;<span class="arr arr-ext">\u2197</span></a>' : '';
+
+		return '<div class="tool-row' + (isSub ? ' is-sub' : '') + '" data-id="' + esc(t.id) + '">' +
+			thumb(key, label) +
+			'<div class="tool-body">' +
+				'<h3 class="tool-name">' + head + '</h3>' +
+				desc + uses + meta + tags +
+				'<div class="tool-tagline">' +
+					condChip(t) + (isSub ? '' : locChip(t)) +
+					'<span class="tag tag-qty">\u00d7 ' + (t.qty || 0) + '</span>' + link +
+				'</div>' +
+			'</div>' +
+		'</div>';
 	}
 
 	function kitHtml(v, ts) {
 		var row = v.row, kit = row.kit;
 		var label = kit.title || row.name;
-		var img = thumb(kit.key, label);
-		var link = kit.url ? '<a href="' + esc(kit.url) + '" target="_blank" rel="noopener">' + (kit.official === false ? 'Product page' : 'Official page') + '&nbsp;<span class="arr arr-ext">↗</span></a>' : '';
-		var tags = (kit.tags && kit.tags.length) ? '<span class="tool-tags">' + kit.tags.map(function (g) { return '<span>' + hl(g, ts) + '</span>'; }).join('') + '</span>' : '';
-		var n = row.subs.length;
-		var shownN = v.subs.length;
-		var badge = '<span class="kit-badge"><span class="tri">▸</span>Set · ' + n + ' items' +
-			(shownN !== n ? ' · ' + shownN + ' matching' : '') + '</span>';
+		var n = row.subs.length, shownN = v.subs.length;
+		var badge = '<span class="tag tag-set"><span class="tri">\u25b8</span>Set \u00b7 ' + n + ' items' +
+			(shownN !== n ? ' \u00b7 ' + shownN + ' matching' : '') + '</span>';
+		var uses = kit.uses ? '<p class="tool-uses">' + hl(kit.uses, ts) + '</p>' : '';
+		var meta = kit.size ? '<p class="tool-meta">' + hl(kit.size, ts) + '</p>' : '';
+		var tags = (kit.tags && kit.tags.length) ? '<p class="tool-tags">' + kit.tags.map(function (g) { return '<span>' + hl(g, ts) + '</span>'; }).join('') + '</p>' : '';
+		var part = /\((\d{6,})\)/.exec(row.name);
+		var link = kit.url ? '<a class="tag tag-link" href="' + esc(kit.url) + '" target="_blank" rel="noopener">' +
+			(kit.official === false ? 'Product page' : 'Official page') + (part ? ' \u00b7 ' + esc(part[1]) : '') + '&nbsp;<span class="arr arr-ext">\u2197</span></a>' : '';
 
 		var html = '<details class="kit"' + (v.open ? ' open' : '') + '><summary>' +
-			'<div class="tool-row">' + img +
-			'<div class="tool-main"><p class="tool-name">' + hl(label, ts) + '</p>' + badge + (link ? '<span class="tool-brand">' + link + '</span>' : '') + '</div>' +
-			'<div class="tool-sizecol"><span class="tool-size">' + hl(kit.size || '', ts) + '</span></div>' +
-			'<div class="tool-usescol"><span class="tool-uses">' + hl(kit.uses || '', ts) + '</span>' + tags + '</div>' +
-			'<span class="tool-qty">' + row.pieces + '</span>' +
+			'<div class="tool-row is-set" data-id="' + esc(kit.id) + '">' + thumb(kit.key, label) +
+			'<div class="tool-body">' +
+				'<h3 class="tool-name">' + heading(brandOf(row), label, ts) + '</h3>' +
+				uses + meta + tags +
+				'<div class="tool-tagline">' + badge + condChip(kit) + locChip(kit) +
+					'<span class="tag tag-qty">\u00d7 ' + row.pieces + '</span>' + link + '</div>' +
+			'</div>' +
 			'</div></summary><div class="kit-items">';
-		v.subs.forEach(function (s) { html += rowHtml(s.item, kit, ts); });
+		v.subs.forEach(function (s) { html += rowHtml(s.item, true, ts); });
 		html += '</div></details>';
 		return html;
 	}
+	function brandOf(row) {
+		var first = row.subs[0] && row.subs[0].item;
+		return first && first.brand !== '\u2014' ? first.brand : '';
+	}
+
+	function condChip(t) {
+		var c = condOf(t);
+		var cls = 'tag tag-cond tag-edit' + (c === DEFAULT_CONDITION ? ' is-default' : '') + ' cond-' + slug(c);
+		return '<button type="button" class="' + cls + '" data-edit="condition" data-id="' + esc(t.id) + '" title="Change condition">' + esc(c) + '</button>';
+	}
+	function locChip(t) {
+		var l = locOf(t);
+		var cls = 'tag tag-loc tag-edit' + (l === DEFAULT_LOCATION ? ' is-default' : '');
+		return '<button type="button" class="' + cls + '" data-edit="location" data-id="' + esc(t.id) + '" title="Change location"><span class="tag-k">At</span>' + esc(l) + '</button>';
+	}
+	function slug(s) { return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-'); }
 
 	// a thumbnail that opens the full cut-out on click; hidden if the file is missing
 	function thumb(key, label) {
-		if (!key) return '<span class="tool-thumb is-missing"></span>';
+		if (!key) return '<span class="tool-thumb-btn is-missing"></span>';
 		var src = IMG + esc(key) + '.webp';
 		return '<button type="button" class="tool-thumb-btn" data-src="' + src + '" data-label="' + esc(label) + '" aria-label="Enlarge: ' + esc(label) + '">' +
 			'<img class="tool-thumb" src="' + src + '" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.add(\'is-missing\')"></button>';
 	}
 
-	/* ------------------------------------------------------------------ */
+	/* ---- helpers ---------------------------------------------------------- */
 	function esc(s) {
 		return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
 			return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
@@ -252,9 +341,8 @@
 	// escape, then wrap matched search terms in <mark>
 	function hl(s, ts) {
 		var out = esc(s);
-		if (!ts.length || !out) return out;
+		if (!ts || !ts.length || !out) return out;
 		var pat = ts.map(function (t) {
-			// a term typed as "x" should also light up "×"
 			var e = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/x/g, '[x×]').replace(/-/g, '[-–—]');
 			return /^[a-z0-9.]{1,3}$/.test(t) ? '(?<![a-z0-9.])' + e + '(?![a-z0-9.])' : e;
 		}).join('|');
@@ -263,7 +351,60 @@
 		} catch (e) { return out; }
 	}
 
-	/* ------------------------------------------------------------------ */
+	/* ---- editing popover -------------------------------------------------- */
+	var $pop = null, popFor = null;
+	function openEditor(btn) {
+		var id = btn.getAttribute('data-id'), field = btn.getAttribute('data-edit');
+		var t = model.byId[id];
+		if (!t) return;
+		closeEditor();
+		popFor = btn;
+		$pop = document.createElement('div');
+		$pop.className = 'tool-pop';
+		$pop.setAttribute('role', 'dialog');
+		var inner;
+		if (field === 'condition') {
+			inner = '<p class="tool-pop-title">Condition</p><div class="tool-pop-opts">' + CONDITIONS.map(function (c) {
+				return '<button type="button" class="tool-pop-opt' + (c === condOf(t) ? ' is-on' : '') + '" data-value="' + esc(c) + '">' + esc(c) + '</button>';
+			}).join('') + '</div>';
+		} else {
+			inner = '<p class="tool-pop-title">Location</p>' +
+				'<input class="tool-pop-input" type="text" list="tools-locations" value="' + esc(locOf(t)) + '" autocomplete="off" spellcheck="false">' +
+				'<datalist id="tools-locations">' + allLocations().map(function (l) { return '<option value="' + esc(l) + '">'; }).join('') + '</datalist>' +
+				'<div class="tool-pop-actions"><button type="button" class="tool-pop-save tools-send">Save&nbsp;<span class="arr">\u2192</span></button>' +
+				'<button type="button" class="tool-pop-cancel">Cancel</button></div>';
+		}
+		$pop.innerHTML = inner + '<p class="tool-pop-note">' + (store.mode === 'local' ? 'Saved in this browser only until the KV store is set up.' : 'Saved for everyone, straight away.') + '</p>';
+		btn.parentNode.insertBefore($pop, btn.nextSibling);
+		$pop.addEventListener('click', function (e) {
+			e.stopPropagation();
+			var o = e.target.closest('.tool-pop-opt');
+			if (o) { commit(id, { condition: o.getAttribute('data-value') }); return; }
+			if (e.target.closest('.tool-pop-save')) { commit(id, { location: $pop.querySelector('.tool-pop-input').value.trim() || DEFAULT_LOCATION }); return; }
+			if (e.target.closest('.tool-pop-cancel')) { closeEditor(); }
+		});
+		$pop.addEventListener('keydown', function (e) {
+			if (e.key === 'Escape') { e.stopPropagation(); closeEditor(); }
+			if (e.key === 'Enter' && e.target.classList.contains('tool-pop-input')) { e.preventDefault(); commit(id, { location: e.target.value.trim() || DEFAULT_LOCATION }); }
+		});
+		var focus = $pop.querySelector('.tool-pop-input') || $pop.querySelector('.tool-pop-opt.is-on') || $pop.querySelector('.tool-pop-opt');
+		if (focus) { focus.focus(); if (focus.select) focus.select(); }
+	}
+	function closeEditor() {
+		if ($pop && $pop.parentNode) $pop.parentNode.removeChild($pop);
+		$pop = null; popFor = null;
+	}
+	function commit(id, patch) {
+		closeEditor();
+		saveState(id, patch).then(function () {
+			render();
+		}).catch(function (err) {
+			render();
+			if ($result) $result.textContent = 'Could not save: ' + err.message;
+		});
+	}
+
+	/* ---- events ----------------------------------------------------------- */
 	var debounce;
 	function bind() {
 		$q.addEventListener('input', function () {
@@ -286,23 +427,40 @@
 			state.cat = (c === state.cat) ? null : c;
 			render();
 		});
-		// "/" focuses search from anywhere, like a proper tool
 		document.addEventListener('keydown', function (e) {
-			if (e.key === '/' && document.activeElement !== $q && !e.metaKey && !e.ctrlKey) {
+			if (e.key === '/' && document.activeElement !== $q && !e.metaKey && !e.ctrlKey && !$pop) {
 				e.preventDefault(); $q.focus(); $q.select();
 			}
+			if (e.key === 'Escape' && $pop) closeEditor();
 		});
 		window.addEventListener('popstate', function () { readUrl(); $q.value = state.q; render(); });
 
-		// enlarge a photo in a small window; Escape, the dot or a click outside closes it
+		// capture phase: chips, thumbs, links and the editor inside a <summary> must not toggle the set
 		$list.addEventListener('click', function (e) {
-			var b = e.target.closest('.tool-thumb-btn');
-			if (!b) return;
-			e.preventDefault(); e.stopPropagation();
-			openZoom(b.getAttribute('data-src'), b.getAttribute('data-label'), b);
+			var hit = e.target.closest('.tool-pop, .tag-edit, .tool-thumb-btn, a');
+			if (hit && e.target.closest('summary')) e.preventDefault();
+		}, true);
+
+		$list.addEventListener('click', function (e) {
+			var th = e.target.closest('.tool-thumb-btn');
+			if (th) {
+				e.stopPropagation();
+				openZoom(th.getAttribute('data-src'), th.getAttribute('data-label'), th);
+				return;
+			}
+			var ed = e.target.closest('.tag-edit');
+			if (ed) {
+				e.stopPropagation();
+				if (popFor === ed) closeEditor(); else openEditor(ed);
+				return;
+			}
+		});
+		document.addEventListener('click', function (e) {
+			if ($pop && !$pop.contains(e.target) && !(popFor && popFor.contains(e.target))) closeEditor();
 		});
 	}
 
+	/* ---- zoom ------------------------------------------------------------- */
 	var $zoom = null, zoomFrom = null;
 	function openZoom(src, label, from) {
 		if (!$zoom) {
@@ -331,6 +489,7 @@
 		if (zoomFrom) zoomFrom.focus();
 	}
 
+	/* ---- url -------------------------------------------------------------- */
 	function readUrl() {
 		var p = new URLSearchParams(location.search);
 		state.q = p.get('q') || '';

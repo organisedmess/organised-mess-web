@@ -12,6 +12,8 @@
 //  · wrangler.jsonc lists /internal* in run_worker_first — otherwise the static files under /internal
 //    would be served straight from the asset cache without ever reaching this check.
 //  · anything added under site/internal/ is covered; add a row to site/internal/index.html to list it.
+//  · /internal/tools/api/state keeps each tool's location + condition in KV (binding TOOLS_KV,
+//    see wrangler.jsonc). Without the binding the page falls back to the browser's localStorage.
 //
 // Contact form:
 //  · delivery: SMTP straight to Google Workspace from the Worker (cloudflare:sockets), logged in as
@@ -227,6 +229,7 @@ async function internal(request, env, url) {
 
 	if (await internalSession(request, env)) {
 		if (url.pathname === INTERNAL + '/login') return bounce(INTERNAL_HOME);
+		if (url.pathname === INTERNAL + '/tools/api/state') return toolsState(request, env);
 		const res = await env.ASSETS.fetch(request);
 		const out = new Response(res.body, res);
 		out.headers.set('Cache-Control', 'private, no-store');
@@ -339,4 +342,37 @@ function internalLogin(next, error, status) {
 		status,
 		headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex, nofollow' }
 	});
+}
+
+/* ---- /internal/tools/api/state: per-tool location + condition in KV --------- */
+// GET  → { items: { [id]: { location, condition, updated } } }
+// PUT  { id, location?, condition? } → merges that one entry
+
+const STATE_KEY = 'tools-state-v1';
+const CONDITIONS = ['Not assessed', 'Good', 'Worn', 'Needs service', 'Broken', 'Missing'];
+
+async function toolsState(request, env) {
+	if (!env.TOOLS_KV) return json({ error: 'TOOLS_KV binding not configured' }, 503);
+	if (request.method === 'GET') {
+		const items = (await env.TOOLS_KV.get(STATE_KEY, 'json')) || {};
+		return json({ items }, 200);
+	}
+	if (request.method === 'PUT') {
+		let body;
+		try { body = await request.json(); } catch (e) { return json({ error: 'bad json' }, 400); }
+		const id = String(body.id || '').slice(0, 160);
+		if (!/^[a-z0-9][a-z0-9._-]*$/i.test(id)) return json({ error: 'bad id' }, 400);
+		const items = (await env.TOOLS_KV.get(STATE_KEY, 'json')) || {};
+		const cur = items[id] || {};
+		if (body.location !== undefined) cur.location = String(body.location).trim().slice(0, 120);
+		if (body.condition !== undefined) {
+			if (!CONDITIONS.includes(body.condition)) return json({ error: 'bad condition' }, 400);
+			cur.condition = body.condition;
+		}
+		cur.updated = new Date().toISOString();
+		items[id] = cur;
+		await env.TOOLS_KV.put(STATE_KEY, JSON.stringify(items));
+		return json({ ok: true, item: cur }, 200);
+	}
+	return json({ error: 'GET or PUT' }, 405);
 }
