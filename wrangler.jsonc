@@ -10,11 +10,10 @@
 		"binding": "ASSETS",
 		"not_found_handling": "404-page"
 	},
-	// outbound email via Resend (the domain's mail lives on Google Workspace, so Cloudflare Email
-	// Routing is not an option — it would replace the MX records). Secrets, set in the dashboard:
-	// RESEND_API_KEY and TURNSTILE_SECRET. The sender is on the send. subdomain verified in Resend.
+	// outbound email: SMTP to Google Workspace from the Worker, as GMAIL_USER. Secrets set in the
+	// dashboard (never here): GMAIL_APP_PASSWORD, TURNSTILE_SECRET.
 	"vars": {
-		"CONTACT_TO": "matthew@organisedmess.studio",
-		"CONTACT_FROM": "Organised Mess website <noreply@send.organisedmess.studio>"
+		"GMAIL_USER": "matthew@organisedmess.studio",
+		"CONTACT_TO": "matthew@organisedmess.studio"
 	}
 }

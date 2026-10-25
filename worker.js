@@ -5,12 +5,13 @@
 // Everything else passes straight through to the static assets.
 //
 // Contact form:
-//  · delivery: Resend (secret RESEND_API_KEY; sender domain send.organisedmess.studio verified there).
-//    Cloudflare's own send_email binding is also supported if a CONTACT_MAIL binding is ever added,
-//    but it needs Email Routing on the zone, which would replace the Google Workspace MX records.
+//  · delivery: SMTP straight to Google Workspace from the Worker (cloudflare:sockets), logged in as
+//    GMAIL_USER with an app password (secret GMAIL_APP_PASSWORD). No third-party mail service.
+//    (Cloudflare's own send_email binding is not an option: it needs Email Routing on the zone,
+//    which would replace the Google Workspace MX records.)
 //  · spam: Turnstile (secret TURNSTILE_SECRET; site key in index.html), plus a honeypot field,
 //    a minimum fill time and a per-IP rate limit.
-import { EmailMessage } from 'cloudflare:email';
+import { connect } from 'cloudflare:sockets';
 
 const MAX = { name: 120, email: 200, org: 120, message: 4000 };
 
@@ -70,8 +71,9 @@ async function contact(request, env, url) {
 		if (!ok) return reply({ error: 'We couldn’t confirm you’re not a bot. Please try again, or write to hello@organisedmess.studio.' }, 400);
 	}
 
-	const to = env.CONTACT_TO || 'hello@organisedmess.studio';
-	const from = env.CONTACT_FROM || 'Organised Mess website <noreply@organisedmess.studio>';
+	if (!env.GMAIL_USER || !env.GMAIL_APP_PASSWORD) return reply({ error: 'The form isn’t connected yet — please write to hello@organisedmess.studio.' }, 503);
+	const to = env.CONTACT_TO || env.GMAIL_USER;
+	const from = `Organised Mess website <${env.GMAIL_USER}>`;   // Google only sends as the signed-in account
 	const subject = `Website enquiry — ${name}${org ? ', ' + org : ''}`;
 	const text = [
 		`From: ${name}${org ? ' — ' + org : ''}`,
@@ -85,18 +87,7 @@ async function contact(request, env, url) {
 	].join('\n');
 
 	try {
-		if (env.RESEND_API_KEY) {
-			const r = await fetch('https://api.resend.com/emails', {
-				method: 'POST',
-				headers: { 'Authorization': `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-				body: JSON.stringify({ from, to: [to], reply_to: email, subject, text })
-			});
-			if (!r.ok) throw new Error('resend ' + r.status);
-		} else if (env.CONTACT_MAIL) {
-			await env.CONTACT_MAIL.send(new EmailMessage(addr(from), to, mime({ from, to, replyTo: email, subject, text })));
-		} else {
-			return reply({ error: 'The form isn’t connected yet — please write to hello@organisedmess.studio.' }, 503);
-		}
+		await withTimeout(smtpSend(env, { from, to, replyTo: email, subject, text }), 20000);
 	} catch (e) {
 		console.error('contact: send failed', e && e.message);
 		return reply({ error: 'That didn’t send. Please try again, or write to hello@organisedmess.studio.' }, 502);
@@ -127,6 +118,44 @@ async function allow(ip) {
 	} catch (e) { return true; }
 }
 
+/* ---- SMTP (implicit TLS on 465) — just enough of RFC 5321 to hand Google one message ---- */
+async function smtpSend(env, msg) {
+	const host = env.SMTP_HOST || 'smtp.gmail.com', port = Number(env.SMTP_PORT || 465);
+	const sock = connect({ hostname: host, port }, { secureTransport: env.SMTP_TLS === 'off' ? 'off' : 'on', allowHalfOpen: false });
+	const reader = sock.readable.getReader(), writer = sock.writable.getWriter();
+	const dec = new TextDecoder(), enc = new TextEncoder();
+	let buf = '';
+	// a reply is one or more "NNN-text" lines ending with "NNN text"
+	async function expect(code) {
+		for (;;) {
+			const m = /^(\d{3}) .*\r?\n/m.exec(buf);   // the last line of a reply has a space after the code
+			if (m) {
+				const end = m.index + m[0].length; const line = buf.slice(0, end); buf = buf.slice(end);
+				if (m[1] !== String(code)) throw new Error('smtp ' + m[0].trim().slice(0, 120));
+				return line;
+			}
+			const { value, done } = await reader.read();
+			if (done) throw new Error('smtp: connection closed');
+			buf += dec.decode(value, { stream: true });
+		}
+	}
+	const send = (s) => writer.write(enc.encode(s + '\r\n'));
+	try {
+		await expect(220);
+		await send('EHLO organisedmess.studio'); await expect(250);
+		await send('AUTH PLAIN ' + btoa('\0' + env.GMAIL_USER + '\0' + env.GMAIL_APP_PASSWORD)); await expect(235);
+		await send('MAIL FROM:<' + env.GMAIL_USER + '>'); await expect(250);
+		await send('RCPT TO:<' + addr(msg.to) + '>'); await expect(250);
+		await send('DATA'); await expect(354);
+		await send(mime(msg).replace(/\r\n\./g, '\r\n..') + '\r\n.'); await expect(250);
+		await send('QUIT'); await expect(221).catch(() => {});
+	} finally {
+		try { writer.releaseLock(); reader.releaseLock(); sock.close(); } catch (e) {}
+	}
+}
+function withTimeout(p, ms) {
+	return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('smtp: timed out')), ms))]);
+}
 // a plain-text MIME message; headers are encoded so nothing typed into the form can inject one
 function mime({ from, to, replyTo, subject, text }) {
 	const b64 = (s) => btoa(unescape(encodeURIComponent(s)));
@@ -147,7 +176,6 @@ function mime({ from, to, replyTo, subject, text }) {
 	].join('\r\n');
 }
 function addr(s) { const m = /<([^>]+)>/.exec(s); return m ? m[1] : s.trim(); }
-
 function json(body, status) {
 	return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
 }
