@@ -21,7 +21,7 @@
 		'Workholding', 'Wire wrap', 'Testing & measuring', '3D printing', 'Laser cutting',
 		'Workstation', 'Cleaning'
 	];
-	var UPDATED = '25 Oct 2026';
+	var UPDATED = '31 Oct 2026';
 	var IMG = '/internal/tools/img/';
 	var API = '/internal/tools/api/state';
 
@@ -294,7 +294,8 @@
 		var badge = '<span class="tag tag-set"><span class="tri">\u25b8</span>Set \u00b7 ' + n + ' items' +
 			(shownN !== n ? ' \u00b7 ' + shownN + ' matching' : '') + '</span>';
 		var uses = kit.uses ? '<p class="tool-uses">' + hl(kit.uses, ts) + '</p>' : '';
-		var meta = kit.size ? '<p class="tool-meta">' + hl(kit.size, ts) + '</p>' : '';
+		var kitMeta = [kit.size, kit.detail].filter(Boolean).map(function (x) { return hl(x, ts); });
+		var meta = kitMeta.length ? '<p class="tool-meta">' + kitMeta.join(' \u00b7 ') + '</p>' : '';
 		var tags = (kit.tags && kit.tags.length) ? '<p class="tool-tags">' + kit.tags.map(function (g) { return '<span>' + hl(g, ts) + '</span>'; }).join('') + '</p>' : '';
 		var part = /\((\d{6,})\)/.exec(row.name);
 		var link = kit.url ? '<a class="tag tag-link" href="' + esc(kit.url) + '" target="_blank" rel="noopener">' +
