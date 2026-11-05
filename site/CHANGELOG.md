@@ -178,3 +178,6 @@ Everything except the copy edits is a token, attribute or one-line switch in `si
 
 ## Tools: Wera Bicycle Set 12
 - Added the Wera Bicycle Set 12 (05004181001) as a set under a new Spanners & wrenches category: eleven 6003 Joker combination wrenches 6–17 mm with their lengths and a 15 × 174 mm pedal wrench, in the Joker bag (245 × 105 × 65 mm). Photo from the Tool Nut listing, cut out. 370 pieces · 16 sets · 21 categories.
+
+## Tools: individual Joker wrench photos
+- Each of the twelve Bicycle Set 12 wrenches now has its own cut-out photo (Tool Nut / HF Welding Supplies product shots), so the Take-it-easy colour band per size is visible in the list and detail window. Article numbers corrected to Wera's catalogue (6 → 05020198001 … 17 → 05020208001, 9 mm is 05020219001, pedal 05020221001).
