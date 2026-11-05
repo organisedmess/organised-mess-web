@@ -363,12 +363,12 @@
 		'    float ang = k * 0.785398;',
 		'    pos += vec2(cos(ang) / uAspect, sin(ang)) * uTexel.y * SP;',
 		'    w -= 1.0;',
-		// at each grid point, sometimes turn: 45° more often than 90°, and mostly keep to the orthogonals
-		'    if (mod(w, 20.0) < 0.5 && w > 0.5) { float r = hash(pos * 911.0 + uTime); if (r < 0.22) { float s = hash(pos * 377.0 + uTime) < 0.5 ? 1.0 : -1.0; float by = hash(pos * 533.0 + uTime) < 0.6 ? 1.0 : 2.0; k = mod(k + s * by + 8.0, 8.0); pos = snap(pos); } }',
+		// at each grid point, occasionally turn a right angle
+		'    if (mod(w, 20.0) < 0.5 && w > 0.5) { float r = hash(pos * 911.0 + uTime); if (r < 0.12) { float s = hash(pos * 377.0 + uTime) < 0.5 ? 2.0 : -2.0; k = mod(k + s + 8.0, 8.0); pos = snap(pos); } }',
 		'    if (w <= 0.0) { pos = snap(pos); w = -(60.0 + hash(pos * 123.0 + uTime) * 240.0); }',   // come to rest on the grid
 		'  } else {',
 		'    w += 1.0;',
-		'    if (w >= 0.0) { pos = snap(vec2(hash(vUv + uTime), hash(vUv + uTime + 1.0))); float r = hash(vUv + uTime + 2.0); k = r < 0.7 ? floor(r / 0.7 * 4.0) * 2.0 : floor((r - 0.7) / 0.3 * 4.0) * 2.0 + 1.0; w = (3.0 + floor(hash(vUv + uTime + 3.0) * 12.0)) * 20.0; }',   // a new run elsewhere: 3–14 cells, orthogonal 70% of the time
+		'    if (w >= 0.0) { pos = snap(vec2(hash(vUv + uTime), hash(vUv + uTime + 1.0))); k = floor(hash(vUv + uTime + 2.0) * 4.0) * 2.0; w = (4.0 + floor(hash(vUv + uTime + 3.0) * 16.0)) * 20.0; }',   // a new run elsewhere: 4–19 cells, orthogonal
 		'  }',
 		'  pos = fract(pos);',
 		'  gl_FragColor = vec4(pos, k, w);',
@@ -382,10 +382,10 @@
 		'  float i = aIndex; vec2 uv = (vec2(mod(i, uN), floor(i / uN)) + 0.5) / uN; vec4 a = texture2D(uAgents, uv);',
 		'  float id = hash(uv * 31.7), id2 = hash(uv * 57.1);',
 		'  bool moving = a.w > 0.0, resting = a.w < 0.0;',
-		'  bool ring = resting && id < 0.45;',
-		'  bool show = uPass < 0.5 ? moving : (uPass < 1.5 ? true : (resting && id2 < 0.3));',
-		'  float size = uPass < 0.5 ? 1.0 : (uPass < 1.5 ? (ring ? 7.0 : (resting ? 3.4 : 2.2)) : 24.0 + id * 40.0);',
-		'  vA = uPass < 1.5 ? 1.0 : 0.003 + id2 * 0.01; vRing = ring ? 1.0 : 0.0;',
+		'  bool ring = resting && id < 0.18;',
+		'  bool show = uPass < 0.5 ? moving : (uPass < 1.5 ? true : (resting && id2 < 0.45));',
+		'  float size = uPass < 0.5 ? 1.0 : (uPass < 1.5 ? (ring ? 5.5 : (resting ? 2.6 : 2.0)) : 30.0 + id * 60.0);',
+		'  vA = uPass < 1.5 ? 1.0 : 0.002 + id2 * 0.009; vRing = ring ? 1.0 : 0.0;',
 		'  gl_Position = show ? vec4(a.xy * 2.0 - 1.0, 0.0, 1.0) : vec4(3.0, 3.0, 0.0, 1.0);',
 		'  gl_PointSize = size;',
 		'}'
@@ -403,9 +403,9 @@
 		'void main(){',
 		'  vec4 c = S(vec2(0.0));',
 		'  float g = 0.0; for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) g += S(vec2(float(x), float(y))).g;',
-		'  g = mix(c.g, g / 9.0, 0.35) * 0.995;',   // stains bleed outwards and fade slowly
-		'  float r = c.r * 0.95;',                 // strokes fade behind the head
-		'  float b = c.b * 0.45;',                  // the head dot only lives where the head is
+		'  g = mix(c.g, g / 9.0, 0.45) * 0.995;',   // stains bleed outwards and fade slowly
+		'  float r = c.r * 0.985;',                 // strokes fade behind the head
+		'  float b = 0.0;',                         // the head is drawn fresh after each step (see postPasses)
 		'  if (uSeed > 0.0) { r = 0.0; g = 0.0; b = 0.0; }',
 		'  gl_FragColor = vec4(r, g, b, 1.0);',
 		'}'
@@ -643,7 +643,7 @@
 	};
 	var OURS = {
 		drift: { step: STEP_DRIFT_TRAIL, float: false, res: 2, cap: 512, tick: 1 / 30, steps: 1, warm: 240, soft: 0.7, warp: 0.25, ink: 0.9, full: 0.7, pool: 0.3, minc: 0.45, steady: true,
-			pat: 'min(1.0, s.g * 0.9 + max(s.r * 1.6, s.b * 2.2))', agents: 0.0012, agent: DRIFT_AGENT, depVert: DRIFT_DEP_VERT, depFrag: DRIFT_DEP_FRAG, passes: 3, dep: 0.9 }
+			pat: 'min(1.0, s.g * 0.9 + max(s.r * 0.75, s.b * 1.6))', agents: 0.0009, agent: DRIFT_AGENT, depVert: DRIFT_DEP_VERT, depFrag: DRIFT_DEP_FRAG, passes: [0, 2], postPasses: [1], dep: 0.6 }
 	};
 	var ROUTERS = { router: ROUTER({ rawink: routerInk(true, false), uniforms: { uOrtho: 0, uSignal: 0, uLayers: 1, uSpawn: 0.0000004, uAgeRate: 0.00055, uTurn: 0.015, uMaxLen: 60, uIc: 0, uIcBlock: 64 } }) };
 	var LEGACY = {
@@ -908,10 +908,7 @@
 				gl.bindFramebuffer(gl.FRAMEBUFFER, S.fbo[src]);
 				gl.viewport(0, 0, S.size.w, S.size.h);
 				gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
-				for (var pass = 0; pass < (sys.passes || 1); pass++) {
-					if (dp.u.uPass) gl.uniform1f(dp.u.uPass, pass);
-					gl.drawArrays(gl.POINTS, 0, S.agentN * S.agentN);
-				}
+				this.deposit(sys.passes || 1);
 				gl.disable(gl.BLEND);
 				gl.activeTexture(gl.TEXTURE0);
 			}
@@ -930,10 +927,34 @@
 			gl.bindTexture(gl.TEXTURE_2D, S.tex[src]);
 			gl.uniform1i(p.u.uState, 0);
 			gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+			if (S.agentProg && sys.postPasses) {
+				// marks that must not lag or flicker (the head) go onto the state just written
+				var dp2 = S.depositProg;
+				gl.useProgram(dp2.p);
+				gl.bindBuffer(gl.ARRAY_BUFFER, S.idxBuf);
+				var loc2 = gl.getAttribLocation(dp2.p, 'aIndex');
+				gl.enableVertexAttribArray(loc2); gl.vertexAttribPointer(loc2, 1, gl.FLOAT, false, 0, 0);
+				gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, S.agentTex[S.agentPing]); gl.uniform1i(dp2.u.uAgents, 0);
+				gl.uniform1f(dp2.u.uN, S.agentN); gl.uniform1f(dp2.u.uDep, sys.dep || 0.12);
+				gl.bindFramebuffer(gl.FRAMEBUFFER, S.fbo[dst]);
+				gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
+				this.deposit(sys.postPasses);
+				gl.disable(gl.BLEND);
+			}
 			S.ping = dst; S.gen++; S.seed = 0;
 			if (sys.reset && S.gen % sys.reset === 0) S.seed = Math.random() * 100 + 1;
 		}
 		gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+	};
+
+	// draw the agent points once per pass (a count, or a list of pass ids) with the deposit program already bound
+	Backdrop.prototype.deposit = function (passes) {
+		var gl = this.gl, S = this.sim, dp = S.depositProg;
+		var list = typeof passes === 'number' ? Array.apply(null, Array(passes)).map(function (_, i) { return i; }) : passes;
+		for (var i = 0; i < list.length; i++) {
+			if (dp.u.uPass) gl.uniform1f(dp.u.uPass, list[i]);
+			gl.drawArrays(gl.POINTS, 0, S.agentN * S.agentN);
+		}
 	};
 
 	/* ---- warp pre-pass plumbing ------------------------------------------- */
