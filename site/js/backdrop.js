@@ -90,7 +90,7 @@
 	function showShader(pat, rawink) {
 		return [
 			'precision highp float; varying vec2 vUv; uniform vec2 uRes; uniform float uTime; uniform vec2 uMouse; uniform float uEnergy;',
-			'uniform sampler2D uState; uniform sampler2D uPrev; uniform float uMix; uniform float uWarp; uniform vec2 uSoft; uniform float uInk; uniform float uInvert; uniform float uLens; uniform float uLensOn; uniform float uFlip; uniform float uMinC; uniform vec2 uCell; uniform float uRing; uniform sampler2D uWarpA; uniform sampler2D uWarpB;',
+			'uniform sampler2D uState; uniform sampler2D uPrev; uniform float uMix; uniform float uWarp; uniform vec2 uSoft; uniform float uInk; uniform float uInvert; uniform float uLens; uniform float uLensOn; uniform float uFlip; uniform float uMinC; uniform float uPool; uniform vec2 uCell; uniform float uRing; uniform sampler2D uWarpA; uniform sampler2D uWarpB;',
 			NOISE, FINISH,
 			// current and previous generation, crossfaded so steps never pop
 			rawink || 'vec4 ink(vec4 c){ return c; }',
@@ -114,7 +114,7 @@
 			'  float base = smoothstep(-0.1, 1.05, 1.0 - uv.y) * 0.75 + 0.05;',
 			'  float liquid = (wb.y - 0.5) * 0.14;',
 			// invert mode: the sheet is pools of light and dark that drift, not a top-to-bottom gradient
-			'  float pools = wb.x;',
+			'  float pools = wb.x * uPool;',   // uPool < 1 keeps the sheet lighter and calmer (per system); 0 = plain paper
 			'  float sheet = uInvert > 0.5 ? mix(0.12, 0.78, pools) + liquid * 0.5 : base + liquid;',
 			// invert: where the organism sits, the sheet flips (dark on the light half, light on the dark half)
 			// thin marks (traces) need a floor on contrast where the sheet is mid-grey, else they vanish in the pools
@@ -346,61 +346,66 @@
 		'}'
 	].join('\n');
 
-	// Drift — ours. Short strokes that each end in a dot, and soft stains where a stroke rests.
-	// Agents: x, y, heading, timer (+ moving, − resting). Trail texture: R thin stroke · G stain · B head dot.
+	// Drift — ours. Router's geometry (eight directions, a grid pitch, rings and dots) animated the slow
+	// way: a head glides along a straight run, turns at grid points, comes to rest as a ring or a dot,
+	// and some rests bloom a soft stain. Agents: x, y, direction (0–7), timer (+ moving, − resting).
+	// Trail texture: R stroke · G stain · B head / ring.
 	var DRIFT_AGENT = [
 		'precision highp float; varying vec2 vUv; uniform sampler2D uAgents; uniform sampler2D uTrail; uniform float uSeed; uniform float uAspect; uniform vec2 uTexel; uniform float uTime;',
-		NOISE,
-		'vec2 curl(vec2 p){ float e = 0.02; float n1 = fbm(p + vec2(0.0, e)), n2 = fbm(p - vec2(0.0, e)), n3 = fbm(p + vec2(e, 0.0)), n4 = fbm(p - vec2(e, 0.0)); return vec2(n1 - n2, -(n3 - n4)) / (2.0 * e); }',
+		HASH,
+		'const float P = 12.0; const float SP = 0.6;',   // grid pitch and speed, in sim texels (so one cell is 20 steps)
+		'vec2 snap(vec2 p){ return (floor(p / (uTexel * P)) + 0.5) * uTexel * P; }',
 		'void main(){',
 		'  vec4 a = texture2D(uAgents, vUv);',
-		'  if (uSeed > 0.0) a = vec4(hash(vUv + uSeed), hash(vUv + uSeed + 1.0), hash(vUv + uSeed + 2.0) * 6.2832, floor(hash(vUv + uSeed + 3.0) * 360.0) - 180.0);',
-		'  vec2 pos = a.xy; float h = a.z, w = a.w;',
+		'  if (uSeed > 0.0) a = vec4(snap(vec2(hash(vUv + uSeed), hash(vUv + uSeed + 1.0))), floor(hash(vUv + uSeed + 2.0) * 8.0), floor(hash(vUv + uSeed + 3.0) * 20.0) * 20.0 - 200.0);',
+		'  vec2 pos = a.xy; float k = a.z, w = a.w;',
 		'  if (w > 0.0) {',
-		// moving: lean towards the field, with a little wander, at a speed that varies per stroke
-		'    vec2 v = curl(vec2(pos.x * uAspect, pos.y) * 2.2 + uTime * 0.012); float t = atan(v.y, v.x);',
-		'    float d = mod(t - h + 3.14159, 6.2832) - 3.14159; h += d * 0.06 + (hash(pos * 800.0 + uTime) - 0.5) * 0.22;',
-		'    float sp = 0.35 + hash(vUv * 17.3) * 0.5;',
-		'    pos += vec2(cos(h) / uAspect, sin(h)) * uTexel.y * sp;',
-		'    w -= 1.0; if (w <= 0.0) w = -(40.0 + hash(pos * 123.0 + uTime) * 200.0);',   // come to rest
+		'    float ang = k * 0.785398;',
+		'    pos += vec2(cos(ang) / uAspect, sin(ang)) * uTexel.y * SP;',
+		'    w -= 1.0;',
+		// at each grid point, sometimes turn: 45° more often than 90°, and mostly keep to the orthogonals
+		'    if (mod(w, 20.0) < 0.5 && w > 0.5) { float r = hash(pos * 911.0 + uTime); if (r < 0.22) { float s = hash(pos * 377.0 + uTime) < 0.5 ? 1.0 : -1.0; float by = hash(pos * 533.0 + uTime) < 0.6 ? 1.0 : 2.0; k = mod(k + s * by + 8.0, 8.0); pos = snap(pos); } }',
+		'    if (w <= 0.0) { pos = snap(pos); w = -(60.0 + hash(pos * 123.0 + uTime) * 240.0); }',   // come to rest on the grid
 		'  } else {',
 		'    w += 1.0;',
-		'    if (w >= 0.0) { pos = vec2(hash(vUv + uTime), hash(vUv + uTime + 1.0)); h = hash(vUv + uTime + 2.0) * 6.2832; w = 40.0 + hash(vUv + uTime + 3.0) * 220.0; }',   // start a new stroke elsewhere
+		'    if (w >= 0.0) { pos = snap(vec2(hash(vUv + uTime), hash(vUv + uTime + 1.0))); float r = hash(vUv + uTime + 2.0); k = r < 0.7 ? floor(r / 0.7 * 4.0) * 2.0 : floor((r - 0.7) / 0.3 * 4.0) * 2.0 + 1.0; w = (3.0 + floor(hash(vUv + uTime + 3.0) * 12.0)) * 20.0; }',   // a new run elsewhere: 3–14 cells, orthogonal 70% of the time
 		'  }',
 		'  pos = fract(pos);',
-		'  gl_FragColor = vec4(pos, h, w);',
+		'  gl_FragColor = vec4(pos, k, w);',
 		'}'
 	].join('\n');
-	// three deposit passes per step: 0 stroke (R, 1 px) · 1 head dot (B, 2.5 px) · 2 stain (G, a soft disc while resting)
+	// three deposit passes per step: 0 stroke (R, 1 px) · 1 head (B: a small dot while moving, a ring or a dot at rest) · 2 stain (G, a soft disc while resting)
 	var DRIFT_DEP_VERT = [
-		'attribute float aIndex; uniform sampler2D uAgents; uniform float uN; uniform float uPass; uniform vec2 uSize; varying float vA;',
+		'attribute float aIndex; uniform sampler2D uAgents; uniform float uN; uniform float uPass; uniform vec2 uSize; varying float vA; varying float vRing;',
 		HASH,
 		'void main(){',
 		'  float i = aIndex; vec2 uv = (vec2(mod(i, uN), floor(i / uN)) + 0.5) / uN; vec4 a = texture2D(uAgents, uv);',
 		'  float id = hash(uv * 31.7), id2 = hash(uv * 57.1);',
 		'  bool moving = a.w > 0.0, resting = a.w < 0.0;',
-		'  bool show = uPass < 0.5 ? moving : (uPass < 1.5 ? true : (resting && id2 < 0.35));',
-		'  float size = uPass < 0.5 ? 1.0 : (uPass < 1.5 ? 3.2 : 16.0 + id * 40.0);',
-		'  vA = uPass < 1.5 ? 1.0 : 0.004 + id2 * 0.012;',
+		'  bool ring = resting && id < 0.45;',
+		'  bool show = uPass < 0.5 ? moving : (uPass < 1.5 ? true : (resting && id2 < 0.3));',
+		'  float size = uPass < 0.5 ? 1.0 : (uPass < 1.5 ? (ring ? 7.0 : (resting ? 3.4 : 2.2)) : 24.0 + id * 40.0);',
+		'  vA = uPass < 1.5 ? 1.0 : 0.003 + id2 * 0.01; vRing = ring ? 1.0 : 0.0;',
 		'  gl_Position = show ? vec4(a.xy * 2.0 - 1.0, 0.0, 1.0) : vec4(3.0, 3.0, 0.0, 1.0);',
 		'  gl_PointSize = size;',
 		'}'
 	].join('\n');
 	var DRIFT_DEP_FRAG = [
-		'precision highp float; uniform float uDep; uniform float uPass; varying float vA;',
+		'precision highp float; uniform float uDep; uniform float uPass; varying float vA; varying float vRing;',
 		'void main(){',
 		'  if (uPass < 0.5) { gl_FragColor = vec4(uDep, 0.0, 0.0, 0.0); return; }',
-		'  if (uPass < 1.5) { float d = length(gl_PointCoord - 0.5) * 2.0; gl_FragColor = vec4(0.0, 0.0, smoothstep(1.0, 0.5, d), 0.0); return; }',
-		'  float d = length(gl_PointCoord - 0.5) * 2.0; gl_FragColor = vec4(0.0, vA * smoothstep(1.0, 0.15, d), 0.0, 0.0);',
+		'  float d = length(gl_PointCoord - 0.5) * 2.0;',
+		'  if (uPass < 1.5) { float m = vRing > 0.5 ? smoothstep(0.45, 0.6, d) * smoothstep(1.0, 0.85, d) : smoothstep(1.0, 0.5, d); gl_FragColor = vec4(0.0, 0.0, m, 0.0); return; }',
+		'  gl_FragColor = vec4(0.0, vA * smoothstep(1.0, 0.2, d), 0.0, 0.0);',
 		'}'
 	].join('\n');
 	var STEP_DRIFT_TRAIL = STEP_HEAD + [
 		'void main(){',
 		'  vec4 c = S(vec2(0.0));',
 		'  float g = 0.0; for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) g += S(vec2(float(x), float(y))).g;',
-		'  g = mix(c.g, g / 9.0, 0.5) * 0.994;',   // stains bleed outwards and fade slowly
-		'  float r = c.r * 0.972;',                 // strokes fade behind the head
-		'  float b = c.b * 0.55;',                  // the head dot only lives where the head is
+		'  g = mix(c.g, g / 9.0, 0.35) * 0.995;',   // stains bleed outwards and fade slowly
+		'  float r = c.r * 0.95;',                 // strokes fade behind the head
+		'  float b = c.b * 0.45;',                  // the head dot only lives where the head is
 		'  if (uSeed > 0.0) { r = 0.0; g = 0.0; b = 0.0; }',
 		'  gl_FragColor = vec4(r, g, b, 1.0);',
 		'}'
@@ -637,8 +642,8 @@
 		'router-layers': ROUTER({ rawink: routerInk(true, false), uniforms: { uOrtho: 0, uSignal: 0, uLayers: 1, uSpawn: 0.0000004, uAgeRate: 0.00055, uTurn: 0.015, uMaxLen: 60, uIc: 0.5, uIcBlock: 64 } })
 	};
 	var OURS = {
-		drift: { step: STEP_DRIFT_TRAIL, float: false, res: 2, cap: 512, tick: 1 / 30, steps: 1, warm: 240, soft: 0.7, warp: 0.25, ink: 0.9, full: 0.7,
-			pat: 'min(1.0, s.g * 0.9 + max(s.r * 1.6, s.b * 2.2))', agents: 0.003, agent: DRIFT_AGENT, depVert: DRIFT_DEP_VERT, depFrag: DRIFT_DEP_FRAG, passes: 3, dep: 0.9 }
+		drift: { step: STEP_DRIFT_TRAIL, float: false, res: 2, cap: 512, tick: 1 / 30, steps: 1, warm: 240, soft: 0.7, warp: 0.25, ink: 0.9, full: 0.7, pool: 0.3, minc: 0.45, steady: true,
+			pat: 'min(1.0, s.g * 0.9 + max(s.r * 1.6, s.b * 2.2))', agents: 0.0012, agent: DRIFT_AGENT, depVert: DRIFT_DEP_VERT, depFrag: DRIFT_DEP_FRAG, passes: 3, dep: 0.9 }
 	};
 	var ROUTERS = { router: ROUTER({ rawink: routerInk(true, false), uniforms: { uOrtho: 0, uSignal: 0, uLayers: 1, uSpawn: 0.0000004, uAgeRate: 0.00055, uTurn: 0.015, uMaxLen: 60, uIc: 0, uIcBlock: 64 } }) };
 	var LEGACY = {
@@ -664,7 +669,7 @@
 
 	// one line each, for the menu
 	var DESCS = {
-		drift: 'Ours. Short strokes drift through a slow field, each ending in a dot where it comes to rest; some rests leave a soft stain that bleeds and fades.',
+		drift: 'Ours. Runs glide along a grid in eight directions, turning at the points, and come to rest as a ring or a dot; some rests bloom a soft stain that fades.',
 		router: 'Our own autorouter. Pads appear, traces route out from them on two layers, jog around each other and end in pads or vias; everything ages off the board and is re-routed.',
 		life: "Conway's Game of Life. A cell lives with two or three neighbours, is born with three, and dies otherwise.",
 		lenia: 'Lenia. A continuous Game of Life: smooth kernels and a growth curve instead of a cell count, so creatures glide rather than blink.',
@@ -779,6 +784,7 @@
 		gl.uniform1f(u.uInk, s.ink * (this.sys.ink || 1));
 		gl.uniform1f(u.uInvert, s.invert ? 1 : 0);
 		gl.uniform1f(u.uMinC, this.sys.minc || 0);
+		gl.uniform1f(u.uPool, this.sys.pool == null ? 1 : this.sys.pool);
 		gl.uniform1f(u.uRing, this.sys.ring ? 1 : 0);
 		gl.uniform1f(u.uLens, s.lens);
 	};
@@ -992,7 +998,8 @@
 		if (c < 0.003) { C.empty = (C.empty || 0) + 1; if (C.empty >= 3) { C.empty = 0; this.reseed(); } } else C.empty = 0;
 		// frozen: coverage has barely moved across the last 12 readings
 		C.hist = C.hist || []; C.hist.push(c); if (C.hist.length > 12) C.hist.shift();
-		if (C.hist.length === 12 && Math.max.apply(null, C.hist) - Math.min.apply(null, C.hist) < 0.002 && now - (this.lastFlip || 0) > 20000) { C.hist = []; this.flip(now); }
+		// (systems that sit at a steady density by design opt out: a flat reading is not a freeze for them)
+		if (!sys.steady && C.hist.length === 12 && Math.max.apply(null, C.hist) - Math.min.apply(null, C.hist) < 0.002 && now - (this.lastFlip || 0) > 20000) { C.hist = []; this.flip(now); }
 		C.last = c;
 	};
 	Backdrop.prototype.reseed = function () { var S = this.sim; S.seed = Math.random() * 100 + 1; S.warm = this.sys.warm; if (S.cov) { S.cov.hist = []; S.cov.fullN = 0; S.cov.empty = 0; } };
