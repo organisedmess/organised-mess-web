@@ -346,6 +346,66 @@
 		'}'
 	].join('\n');
 
+	// Drift — ours. Short strokes that each end in a dot, and soft stains where a stroke rests.
+	// Agents: x, y, heading, timer (+ moving, − resting). Trail texture: R thin stroke · G stain · B head dot.
+	var DRIFT_AGENT = [
+		'precision highp float; varying vec2 vUv; uniform sampler2D uAgents; uniform sampler2D uTrail; uniform float uSeed; uniform float uAspect; uniform vec2 uTexel; uniform float uTime;',
+		NOISE,
+		'vec2 curl(vec2 p){ float e = 0.02; float n1 = fbm(p + vec2(0.0, e)), n2 = fbm(p - vec2(0.0, e)), n3 = fbm(p + vec2(e, 0.0)), n4 = fbm(p - vec2(e, 0.0)); return vec2(n1 - n2, -(n3 - n4)) / (2.0 * e); }',
+		'void main(){',
+		'  vec4 a = texture2D(uAgents, vUv);',
+		'  if (uSeed > 0.0) a = vec4(hash(vUv + uSeed), hash(vUv + uSeed + 1.0), hash(vUv + uSeed + 2.0) * 6.2832, floor(hash(vUv + uSeed + 3.0) * 360.0) - 180.0);',
+		'  vec2 pos = a.xy; float h = a.z, w = a.w;',
+		'  if (w > 0.0) {',
+		// moving: lean towards the field, with a little wander, at a speed that varies per stroke
+		'    vec2 v = curl(vec2(pos.x * uAspect, pos.y) * 2.2 + uTime * 0.012); float t = atan(v.y, v.x);',
+		'    float d = mod(t - h + 3.14159, 6.2832) - 3.14159; h += d * 0.06 + (hash(pos * 800.0 + uTime) - 0.5) * 0.22;',
+		'    float sp = 0.35 + hash(vUv * 17.3) * 0.5;',
+		'    pos += vec2(cos(h) / uAspect, sin(h)) * uTexel.y * sp;',
+		'    w -= 1.0; if (w <= 0.0) w = -(40.0 + hash(pos * 123.0 + uTime) * 200.0);',   // come to rest
+		'  } else {',
+		'    w += 1.0;',
+		'    if (w >= 0.0) { pos = vec2(hash(vUv + uTime), hash(vUv + uTime + 1.0)); h = hash(vUv + uTime + 2.0) * 6.2832; w = 40.0 + hash(vUv + uTime + 3.0) * 220.0; }',   // start a new stroke elsewhere
+		'  }',
+		'  pos = fract(pos);',
+		'  gl_FragColor = vec4(pos, h, w);',
+		'}'
+	].join('\n');
+	// three deposit passes per step: 0 stroke (R, 1 px) · 1 head dot (B, 2.5 px) · 2 stain (G, a soft disc while resting)
+	var DRIFT_DEP_VERT = [
+		'attribute float aIndex; uniform sampler2D uAgents; uniform float uN; uniform float uPass; uniform vec2 uSize; varying float vA;',
+		HASH,
+		'void main(){',
+		'  float i = aIndex; vec2 uv = (vec2(mod(i, uN), floor(i / uN)) + 0.5) / uN; vec4 a = texture2D(uAgents, uv);',
+		'  float id = hash(uv * 31.7), id2 = hash(uv * 57.1);',
+		'  bool moving = a.w > 0.0, resting = a.w < 0.0;',
+		'  bool show = uPass < 0.5 ? moving : (uPass < 1.5 ? true : (resting && id2 < 0.35));',
+		'  float size = uPass < 0.5 ? 1.0 : (uPass < 1.5 ? 3.2 : 16.0 + id * 40.0);',
+		'  vA = uPass < 1.5 ? 1.0 : 0.004 + id2 * 0.012;',
+		'  gl_Position = show ? vec4(a.xy * 2.0 - 1.0, 0.0, 1.0) : vec4(3.0, 3.0, 0.0, 1.0);',
+		'  gl_PointSize = size;',
+		'}'
+	].join('\n');
+	var DRIFT_DEP_FRAG = [
+		'precision highp float; uniform float uDep; uniform float uPass; varying float vA;',
+		'void main(){',
+		'  if (uPass < 0.5) { gl_FragColor = vec4(uDep, 0.0, 0.0, 0.0); return; }',
+		'  if (uPass < 1.5) { float d = length(gl_PointCoord - 0.5) * 2.0; gl_FragColor = vec4(0.0, 0.0, smoothstep(1.0, 0.5, d), 0.0); return; }',
+		'  float d = length(gl_PointCoord - 0.5) * 2.0; gl_FragColor = vec4(0.0, vA * smoothstep(1.0, 0.15, d), 0.0, 0.0);',
+		'}'
+	].join('\n');
+	var STEP_DRIFT_TRAIL = STEP_HEAD + [
+		'void main(){',
+		'  vec4 c = S(vec2(0.0));',
+		'  float g = 0.0; for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) g += S(vec2(float(x), float(y))).g;',
+		'  g = mix(c.g, g / 9.0, 0.5) * 0.994;',   // stains bleed outwards and fade slowly
+		'  float r = c.r * 0.972;',                 // strokes fade behind the head
+		'  float b = c.b * 0.55;',                  // the head dot only lives where the head is
+		'  if (uSeed > 0.0) { r = 0.0; g = 0.0; b = 0.0; }',
+		'  gl_FragColor = vec4(r, g, b, 1.0);',
+		'}'
+	].join('\n');
+
 	// Diffusion-limited aggregation (Nature of Code, random walkers): walkers drift until they touch the aggregate, then stick
 	var DLA_AGENT = [
 		'precision highp float; varying vec2 vUv; uniform sampler2D uAgents; uniform sampler2D uTrail; uniform float uSeed; uniform float uAspect; uniform vec2 uTexel; uniform float uTime;',
@@ -576,6 +636,10 @@
 		'router-signal': ROUTER({ rawink: routerInk(false, true), uniforms: { uOrtho: 0, uSignal: 1, uLayers: 0, uSpawn: 0.0000005, uAgeRate: 0.0005, uTurn: 0.015, uMaxLen: 60, uIc: 0.5, uIcBlock: 64 } }),
 		'router-layers': ROUTER({ rawink: routerInk(true, false), uniforms: { uOrtho: 0, uSignal: 0, uLayers: 1, uSpawn: 0.0000004, uAgeRate: 0.00055, uTurn: 0.015, uMaxLen: 60, uIc: 0.5, uIcBlock: 64 } })
 	};
+	var OURS = {
+		drift: { step: STEP_DRIFT_TRAIL, float: false, res: 2, cap: 512, tick: 1 / 30, steps: 1, warm: 240, soft: 0.7, warp: 0.25, ink: 0.9, full: 0.7,
+			pat: 'min(1.0, s.g * 0.9 + max(s.r * 1.6, s.b * 2.2))', agents: 0.003, agent: DRIFT_AGENT, depVert: DRIFT_DEP_VERT, depFrag: DRIFT_DEP_FRAG, passes: 3, dep: 0.9 }
+	};
 	var ROUTERS = { router: ROUTER({ rawink: routerInk(true, false), uniforms: { uOrtho: 0, uSignal: 0, uLayers: 1, uSpawn: 0.0000004, uAgeRate: 0.00055, uTurn: 0.015, uMaxLen: 60, uIc: 0, uIcBlock: 64 } }) };
 	var LEGACY = {
 		life:       { step: STEP_LIFE,       float: false, res: 7, cap: 256, tick: 0.3,    steps: 1, warm: 0,   soft: 0.8, pat: 'max(s.r, s.g * 0.8)' },
@@ -594,12 +658,13 @@
 		ink:        { step: STEP_INK,        float: true,  res: 2, cap: 512, tick: 1 / 30, steps: 1, warm: 0,   soft: 1.5, pat: 'smoothstep(0.02, 0.8, s.r)', full: 0.6 }
 	};
 	// everything in the pool for now, routers first, so they can be compared side by side
-	var SYSTEMS = Object.assign({}, ROUTERS, LEGACY);
+	var SYSTEMS = Object.assign({}, OURS, ROUTERS, LEGACY);
 	var MODES = Object.keys(SYSTEMS);
-	var NAMES = { router: 'Router', life: 'Game of Life', lenia: 'Lenia', smoothlife: 'SmoothLife', mnca: 'Multi-neighbourhood CA', rd: 'Reaction–diffusion', cyclic: 'Cyclic automaton', bz: 'Belousov–Zhabotinsky', physarum: 'Physarum', ink: 'Ink flow', bugs: 'Larger than Life', waves: 'Wave field', crystal: 'Crystal growth', flow: 'Flow field', dla: 'Diffusion-limited aggregation' };
+	var NAMES = { drift: 'Drift', router: 'Router', life: 'Game of Life', lenia: 'Lenia', smoothlife: 'SmoothLife', mnca: 'Multi-neighbourhood CA', rd: 'Reaction–diffusion', cyclic: 'Cyclic automaton', bz: 'Belousov–Zhabotinsky', physarum: 'Physarum', ink: 'Ink flow', bugs: 'Larger than Life', waves: 'Wave field', crystal: 'Crystal growth', flow: 'Flow field', dla: 'Diffusion-limited aggregation' };
 
 	// one line each, for the menu
 	var DESCS = {
+		drift: 'Ours. Short strokes drift through a slow field, each ending in a dot where it comes to rest; some rests leave a soft stain that bleeds and fades.',
 		router: 'Our own autorouter. Pads appear, traces route out from them on two layers, jog around each other and end in pads or vias; everything ages off the board and is re-routed.',
 		life: "Conway's Game of Life. A cell lives with two or three neighbours, is born with three, and dies otherwise.",
 		lenia: 'Lenia. A continuous Game of Life: smooth kernels and a growth curve instead of a cell count, so creatures glide rather than blink.',
@@ -761,7 +826,7 @@
 		if (sys.agents) {
 			if (!gl.getExtension('OES_texture_float')) return false;
 			S.agentProg = this.makeProgram(sys.agent);
-			S.depositProg = this.makeProgram(PHYS_DEPOSIT_FRAG, PHYS_DEPOSIT_VERT);
+			S.depositProg = this.makeProgram(sys.depFrag || PHYS_DEPOSIT_FRAG, sys.depVert || PHYS_DEPOSIT_VERT);
 			S.agentTex = [this.makeTex(gl.FLOAT, false, true), this.makeTex(gl.FLOAT, false, true)];
 			S.agentFbo = [gl.createFramebuffer(), gl.createFramebuffer()];
 			S.agentN = 0; S.agentPing = 0;
@@ -833,10 +898,14 @@
 				gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 1, gl.FLOAT, false, 0, 0);
 				gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, S.agentTex[adst]); gl.uniform1i(dp.u.uAgents, 0);
 				gl.uniform1f(dp.u.uN, S.agentN); gl.uniform1f(dp.u.uDep, sys.dep || 0.12);
+				if (dp.u.uSize) gl.uniform2f(dp.u.uSize, S.size.w, S.size.h);
 				gl.bindFramebuffer(gl.FRAMEBUFFER, S.fbo[src]);
 				gl.viewport(0, 0, S.size.w, S.size.h);
 				gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
-				gl.drawArrays(gl.POINTS, 0, S.agentN * S.agentN);
+				for (var pass = 0; pass < (sys.passes || 1); pass++) {
+					if (dp.u.uPass) gl.uniform1f(dp.u.uPass, pass);
+					gl.drawArrays(gl.POINTS, 0, S.agentN * S.agentN);
+				}
 				gl.disable(gl.BLEND);
 				gl.activeTexture(gl.TEXTURE0);
 			}
