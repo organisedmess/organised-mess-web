@@ -15,13 +15,13 @@
 	'use strict';
 
 	var CATEGORY_ORDER = [
-		'Screwdrivers & bits', 'Ratchets & sockets', 'Hex keys', 'Power tools',
+		'Screwdrivers & bits', 'Ratchets & sockets', 'Spanners & wrenches', 'Hex keys', 'Power tools',
 		'Crimpers', 'Strippers', 'Cutters & shears', 'Pliers', 'Tweezers',
 		'Soldering', 'Desoldering', 'Soldering aids', 'Fume extraction',
 		'Workholding', 'Wire wrap', 'Testing & measuring', '3D printing', 'Laser cutting',
 		'Workstation', 'Cleaning'
 	];
-	var UPDATED = '31 Oct 2026';
+	var UPDATED = '5 Nov 2026';
 	var IMG = '/internal/tools/img/';
 	var API = '/internal/tools/api/state';
 

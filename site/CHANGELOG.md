@@ -175,3 +175,6 @@ Everything except the copy edits is a token, attribute or one-line switch in `si
 ## Tools: 31 Oct inventory
 - Merged the 31 Oct export: three new Wera sets (Kraftform Kompakt 20 RA-R, Bit-Check 7 Hex-Plus 1, Kraftform Kompakt VDE Big Pack 1 — 40 pieces between them), seven Knipex additions (97 51 10 RJ45 crimper, 16 60 06 coax stripper, 74 01 180 and 70 01 160 diagonal cutters, 78 61 125 ESD Super Knips, 82 01 200 TwinGrip, 86 03 150 pliers wrench, 35 12 115 ESD flat-nose) and the Weller silicone soldering mat. Photos from `~/Claude/tool-photos/clean`, cut out as before. Set rows now show the set's detail line (hex-key lengths). 358 pieces · 15 sets · 20 categories. Laser cutting and Workstation entries kept.
 - `tools/merge_inv.py` does this merge from the markdown export: matches existing records (ids, photos, titles kept), adds new ones, re-expands quantities into per-piece rows.
+
+## Tools: Wera Bicycle Set 12
+- Added the Wera Bicycle Set 12 (05004181001) as a set under a new Spanners & wrenches category: eleven 6003 Joker combination wrenches 6–17 mm with their lengths and a 15 × 174 mm pedal wrench, in the Joker bag (245 × 105 × 65 mm). Photo from the Tool Nut listing, cut out. 370 pieces · 16 sets · 21 categories.
