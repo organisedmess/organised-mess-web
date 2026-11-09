@@ -1,9 +1,10 @@
 /* organisedmess.studio — ground.js
  *
- * The background: a grainy grey sheet with a heavy mass on it.
- * The mass follows the pointer on a slow, heavily damped spring and sinks into the sheet,
- * pulling the paper and its grain in around it; a second, slower mass trails behind as the
- * sheet's memory of where it was. No simulation, no state — one shader per frame.
+ * The background: a grainy grey sheet with a few heavy masses resting on it.
+ * At rest each mass is dispersed — wide, shallow, faint — and drifts very slowly.
+ * When the pointer moves, the mass nearest to it gathers — tight, deep, dark — and is
+ * pulled after the pointer on a slow, damped spring; when the pointer stops it lets go
+ * and spreads out again where it is. No simulation, one shader per frame.
  *
  * Exposes window.Backdrop = { instances: [ground] } with the small API site.js uses for
  * the after-hours state: setSpeedScale(s), settings.mouse_interaction, ready.
@@ -19,27 +20,24 @@
 		'uniform vec2 uRes;          // device px',
 		'uniform float uScale;       // device px per css px',
 		'uniform float uTime, uGrainTime;',
-		'uniform vec3 uMass;         // css px x, y, strength 0..1',
-		'uniform vec3 uWake;',
-		'uniform float uRadius;      // css px',
+		'const int N = 5;',
+		'uniform vec4 uM[N];         // css px x, y, strength 0..1, radius css px',
 		'uniform vec3 uTop, uBottom;',
 		'float hash(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }',
 		'float noise(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);',
 		'  return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y); }',
 		'float fbm(vec2 p){ float s = 0.0, a = 0.5; for (int i = 0; i < 4; i++){ s += a * noise(p); p = p * 2.03 + 17.1; a *= 0.5; } return s / 0.9375; }',
 		// a well: f is how far the sheet is pulled in (0 at a distance, S at the centre), g its slope
-		'void well(vec2 p, vec3 m, float R, inout vec2 pull, inout float depth, inout vec2 slope){',
-		'  vec2 d = p - m.xy; float r2 = dot(d, d), R2 = R * R, k = R2 / (r2 + R2);',
-		'  float f = m.z * 0.9 * k;',
-		'  pull += d * f;',                                    // sample further out: the paper is drawn in towards the mass
+		'void well(vec2 p, vec4 m, inout vec2 pull, inout float depth, inout vec2 slope){',
+		'  float R = m.w; vec2 d = p - m.xy; float r2 = dot(d, d), R2 = R * R, k = R2 / (r2 + R2);',
+		'  pull += d * (m.z * 0.9 * k);',                      // sample further out: the paper is drawn in towards the mass
 		'  depth += m.z * k;',
-		'  slope += m.z * d * (-2.0 * R2 / ((r2 + R2) * (r2 + R2)));',
+		'  slope += m.z * d * (-2.0 * R2 * R / ((r2 + R2) * (r2 + R2)));',
 		'}',
 		'void main(){',
 		'  vec2 px = vec2(vUv.x, 1.0 - vUv.y) * uRes / uScale;',   // css px, y down
 		'  vec2 pull = vec2(0.0); float depth = 0.0; vec2 slope = vec2(0.0);',
-		'  well(px, uMass, uRadius, pull, depth, slope);',
-		'  well(px, uWake, uRadius * 1.6, pull, depth, slope);',
+		'  for (int i = 0; i < N; i++) well(px, uM[i], pull, depth, slope);',
 		'  vec2 q = px + pull;',                                 // the sheet as it lies, warped by the masses
 		'  float H = uRes.y / uScale;',
 		'  float t = clamp(q.y / H, 0.0, 1.0);',
@@ -50,7 +48,7 @@
 		'  float lum = (tooth - 0.5) * 0.035 + (mottle - 0.5) * 0.11;',
 		// the dent: a little darker at the bottom, lit from the top left along its slope
 		'  lum -= depth * depth * 0.16;',
-		'  lum += dot(slope * uRadius, normalize(vec2(-0.55, -0.85))) * 0.16;',
+		'  lum += dot(slope, normalize(vec2(-0.55, -0.85))) * 0.16;',
 		// grain on the device grid, pulled in with the sheet near the mass
 		'  vec2 gp = (gl_FragCoord.xy + pull * uScale * vec2(1.0, -1.0)) * mat2(0.76, 0.65, -0.65, 0.76) + vec2(uGrainTime * 17.3, uGrainTime * 31.7);',
 		'  lum += (hash(gp) - 0.5) * 0.085 * (1.0 + depth * 0.9);',   // the paper is packed tighter in the well, so the grain is heavier there
@@ -77,11 +75,13 @@
 		if (!gl) { document.documentElement.classList.add('no-webgl'); el.parentElement.classList.add('loaded'); return; }
 		this.gl = gl;
 		if (!this.build()) { document.documentElement.classList.add('no-webgl'); el.parentElement.classList.add('loaded'); return; }
-		// the heavy mass and its wake: position, velocity, strength
+		// the masses: where they rest (fractions of the screen), where they are, how gathered they are
 		var w = window.innerWidth, h = window.innerHeight;
-		this.target = { x: w * 0.62, y: h * 0.58, on: false, last: 0 };
-		this.mass = { x: w * 0.62, y: h * 0.58, vx: 0, vy: 0, s: 0 };
-		this.wake = { x: w * 0.62, y: h * 0.58, vx: 0, vy: 0, s: 0 };
+		this.target = { x: w * 0.5, y: h * 0.5, on: false, last: 0, speed: 0, dist: 0 };
+		this.active = -1;
+		this.masses = [[0.22, 0.30], [0.72, 0.22], [0.48, 0.62], [0.86, 0.72], [0.14, 0.82]].map(function (f, i) {
+			return { hx: f[0], hy: f[1], ax: f[0] * w, ay: f[1] * h, x: f[0] * w, y: f[1] * h, vx: 0, vy: 0, g: 0, s: 0, ph: i * 1.7 };
+		});
 		this.bind();
 		this.resize();
 		this.ready = true;
@@ -101,7 +101,9 @@
 		if (!gl.getProgramParameter(p, gl.LINK_STATUS)) { console.warn(gl.getProgramInfoLog(p)); return false; }
 		this.prog = p;
 		this.u = {};
-		['uRes', 'uScale', 'uTime', 'uGrainTime', 'uMass', 'uWake', 'uRadius', 'uTop', 'uBottom'].forEach(function (n) { this.u[n] = gl.getUniformLocation(p, n); }, this);
+		['uRes', 'uScale', 'uTime', 'uGrainTime', 'uTop', 'uBottom'].forEach(function (n) { this.u[n] = gl.getUniformLocation(p, n); }, this);
+		this.u.uM = gl.getUniformLocation(p, 'uM[0]');
+		this.mbuf = new Float32Array(20);
 		var buf = gl.createBuffer();
 		gl.bindBuffer(gl.ARRAY_BUFFER, buf);
 		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
@@ -113,7 +115,11 @@
 
 	Ground.prototype.bind = function () {
 		var self = this, T = this.target;
-		function at(e) { if (!self.settings.mouse_interaction) return; T.x = e.clientX; T.y = e.clientY; T.on = true; T.last = performance.now(); }
+		function at(e) {
+			if (!self.settings.mouse_interaction) return;
+			if (T.on) T.dist += Math.hypot(e.clientX - T.x, e.clientY - T.y);   // turned into a speed once per frame
+			T.x = e.clientX; T.y = e.clientY; T.on = true; T.last = performance.now();
+		}
 		document.addEventListener('pointermove', at, { passive: true, capture: true });
 		document.addEventListener('pointerdown', at, { passive: true, capture: true });
 		document.documentElement.addEventListener('mouseleave', function () { T.on = false; });
@@ -143,33 +149,58 @@
 
 	Ground.prototype.render = function (now) {
 		if (!this.ready) return;
-		var gl = this.gl, u = this.u, T = this.target, M = this.mass, W = this.wake;
-		var dt = Math.min(0.05, (now - this.last) / 1000) * this.speed; this.last = now;
+		var gl = this.gl, u = this.u, T = this.target, ms = this.masses, w = this.w, h = this.h;
+		var real = Math.max(0.001, (now - this.last) / 1000), dt = Math.min(0.05, real) * this.speed; this.last = now;
 		this.time += dt;
-		var idle = now - T.last > 6000;
-		// no pointer (touch screens, or it has left): the mass wanders on its own, very slowly
-		var tx = T.x, ty = T.y;
-		if (!T.on || idle) {
-			var a = this.time * 0.05;
-			tx = this.w * (0.5 + 0.28 * Math.sin(a * 1.3)); ty = this.h * (0.55 + 0.22 * Math.sin(a * 0.9 + 1.1));
+		var base = Math.min(w, h) * 0.2 + 60;
+		// pointer speed in px/s, measured per frame and smoothed over about a tenth of a second
+		T.speed += (Math.min(T.dist / real, 4000) - T.speed) * Math.min(1, real * 10); T.dist = 0;
+		var moving = this.settings.mouse_interaction && T.on && T.speed > 25 && !this.reduced;
+		// the nearest mass takes the pointer; another only takes over when clearly closer (no flicker between two)
+		if (moving) {
+			var best = -1, bd = 1e9;
+			for (var i = 0; i < ms.length; i++) { var d = Math.hypot(ms[i].x - T.x, ms[i].y - T.y); if (d < bd) { bd = d; best = i; } }
+			if (this.active < 0) this.active = best;
+			else if (best !== this.active && bd < 0.5 * Math.hypot(ms[this.active].x - T.x, ms[this.active].y - T.y)) this.active = best;
 		}
-		if (!this.reduced) {
-			spring(M, tx, ty, 3.2, 3.0, dt);
-			spring(W, M.x, M.y, 0.9, 1.6, dt);
-		} else { M.x = tx; M.y = ty; W.x = tx; W.y = ty; }
-		// it sinks in when the page wakes, and lightens a touch while it moves fast
-		var sp = Math.min(1, Math.hypot(M.vx, M.vy) / 1600);
-		var want = this.settings.mouse_interaction ? (T.on && !idle ? 1 : 0.7) * (1 - sp * 0.25) : 0.35;
-		M.s += (want - M.s) * Math.min(1, dt * 1.2);
-		W.s += (want * 0.45 - W.s) * Math.min(1, dt * 0.6);
-		var R = Math.min(this.w, this.h) * 0.2 + 60;
+		var gatherWant = moving ? Math.min(1, Math.max(0, (T.speed - 25) / 350)) : 0;
+		for (var j = 0; j < ms.length; j++) {
+			var m = ms[j], held = j === this.active && (moving || m.g > 0.05);
+			if (held && moving) {
+				spring(m, T.x, T.y, 3.2, 3.0, dt);
+				m.ax = m.x; m.ay = m.y;                                  // it rests wherever it is let go
+			} else {
+				// drifting: a slow wander around its resting place, which itself eases back home over a minute
+				m.ax += (m.hx * w - m.ax) * Math.min(1, dt / 60); m.ay += (m.hy * h - m.ay) * Math.min(1, dt / 60);
+				var t = this.time * 0.06 + m.ph;
+				spring(m, m.ax + Math.sin(t * 1.3) * w * 0.05, m.ay + Math.sin(t * 0.9 + 1.1) * h * 0.05, 0.5, 1.4, dt);
+			}
+			// gather quickly while moving, spread out slowly once still
+			var want = j === this.active ? gatherWant : 0;
+			m.g += (want - m.g) * Math.min(1, dt * (want > m.g ? 3.0 : (j === this.active ? 0.7 : 1.2)));   // a mass that has been handed over lets go a little faster
+			if (!moving && m.g < 0.02 && j === this.active) this.active = -1;
+		}
+		// they keep their distance from each other, so the sheet never collects into one pit
+		for (var a = 0; a < ms.length; a++) for (var b2 = a + 1; b2 < ms.length; b2++) {
+			var A = ms[a], B = ms[b2], dx = B.x - A.x, dy = B.y - A.y, dd = Math.hypot(dx, dy) || 1, lim = base * 1.6;
+			if (dd < lim) { var push = (lim - dd) / lim * 220 * dt; dx /= dd; dy /= dd;
+				if (a !== this.active || !moving) { A.vx -= dx * push; A.vy -= dy * push; }
+				if (b2 !== this.active || !moving) { B.vx += dx * push; B.vy += dy * push; } }
+		}
+		var on = this.settings.mouse_interaction ? 1 : 0.6;
+		for (var k = 0; k < ms.length; k++) {
+			var M = ms[k];
+			M.s += (on - M.s) * Math.min(1, dt * 0.8);                  // they settle in as the page wakes
+			var g = M.g * M.g * (3 - 2 * M.g);
+			this.mbuf[k * 4] = M.x; this.mbuf[k * 4 + 1] = M.y;
+			this.mbuf[k * 4 + 2] = M.s * (0.28 + 0.72 * g);             // dispersed: shallow · gathered: deep
+			this.mbuf[k * 4 + 3] = base * (2.1 - 1.35 * g);             // dispersed: wide · gathered: tight
+		}
 		gl.uniform2f(u.uRes, this.canvas.width, this.canvas.height);
 		gl.uniform1f(u.uScale, this.scale);
 		gl.uniform1f(u.uTime, this.time);
 		gl.uniform1f(u.uGrainTime, this.reduced ? 0 : Math.floor(now / 83) % 97);   // grain changes ~12 times a second, like film
-		gl.uniform3f(u.uMass, M.x, M.y, M.s);
-		gl.uniform3f(u.uWake, W.x, W.y, W.s);
-		gl.uniform1f(u.uRadius, R);
+		gl.uniform4fv(u.uM, this.mbuf);
 		gl.uniform3fv(u.uTop, this.top); gl.uniform3fv(u.uBottom, this.bottom);
 		gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 	};
