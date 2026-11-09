@@ -78,7 +78,7 @@
 
 	/* chrome */
 	--frame: 0px;           /* (no drawn frame) */
-	--bar-pad: 1.25rem;     /* inset of the header/footer pills from the viewport edge */
+	--bar-pad: var(--page-pad);     /* the pills sit at the same inset as the text */
 	--pill-h: 1.65rem;
 	/* liquid glass: a clear lens over the backdrop, ink text on it */
 	--pill-bg: rgba(255, 255, 255, 0.22);
@@ -101,7 +101,6 @@ html {
 }
 html.mobile {
 	font-size: calc(var(--base-size) * var(--mobile-scale));
-	--bar-pad: 0.9rem;
 	--pill-h: max(1.65rem, 34px);          /* touch target */
 	--t-xs: max(0.85rem, 11px);
 	--t-m: max(1.35rem, 15px);
@@ -732,7 +731,7 @@ body.caps-window .os-win-caps {
 	/* may cover the header pills (they blur away beneath the overlay) but never the footer pills */
 	position: fixed; top: var(--page-pad); right: var(--page-pad);
 	width: min(52rem, calc(100vw - 2 * var(--page-pad)));
-	max-height: calc(100vh - var(--page-pad) - var(--bar-pad) - var(--footer-height, var(--pill-h)) - 0.8rem);
+	max-height: calc(100vh - var(--page-pad) - var(--bar-pad) - var(--footer-height, var(--pill-h)) - var(--page-pad));
 	display: flex; flex-direction: column; pointer-events: auto;
 }
 body.caps-window .os-win-caps .page-content {
@@ -749,7 +748,7 @@ body.caps-window .overlay-content.overlay-open.overlay-animating .page-content, 
 @keyframes osWinIn { from { opacity: 0; transform: translateY(0.8rem) scale(0.985); } to { opacity: 1; transform: none; } }
 @keyframes osWinOut { from { opacity: 1; } to { opacity: 0; transform: translateY(0.5rem) scale(0.99); } }
 
-.mobile.caps-window .os-win-caps { top: var(--page-pad); right: var(--page-pad); left: var(--page-pad); width: auto; max-height: calc(100dvh - var(--page-pad) - var(--bar-pad) - var(--footer-height, var(--pill-h)) - 0.8rem); }
+.mobile.caps-window .os-win-caps { top: var(--page-pad); right: var(--page-pad); left: var(--page-pad); width: auto; max-height: calc(100dvh - var(--page-pad) - var(--bar-pad) - var(--footer-height, var(--pill-h)) - var(--page-pad)); }
 
 
 /* ============ 12. Cursor ============ */
