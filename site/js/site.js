@@ -31,11 +31,28 @@
 		return i;
 	}
 
+	// On phones the browser bars slide in and out as you scroll, which changes the height on every
+	// swipe. Re-sizing the type for that made the text jump, so on mobile the layout is computed for
+	// the shortest height seen at this width (bars showing) and only redone when the width changes
+	// or the view gets shorter still.
+	var layoutW = -1, layoutH = Infinity;
+	function onResize() {
+		var w = html.clientWidth, h = window.innerHeight;
+		if (isMobile() && w === layoutW && h >= layoutH) {
+			html.style.setProperty('--viewport-height', h + 'px');
+			return;
+		}
+		applyWindowInfo();
+	}
+
 	function applyWindowInfo() {
 		var w = html.clientWidth;
 		var h = window.innerHeight;
 		var mobile = isMobile();
 		var portrait = portraitMQ.matches;
+		if (w !== layoutW) layoutH = Infinity;
+		layoutW = w; layoutH = Math.min(layoutH, h);
+		if (mobile) h = layoutH;
 
 		// Cargo measures the largest viewport height (100lvh); innerHeight is
 		// close enough on desktop and matches once mobile chrome collapses.
@@ -107,7 +124,7 @@
 	}
 
 	applyWindowInfo();
-	window.addEventListener('resize', applyWindowInfo, { passive: true });
+	window.addEventListener('resize', onResize, { passive: true });
 	portraitMQ.addEventListener('change', applyWindowInfo);
 	landscapeMQ.addEventListener('change', applyWindowInfo);
 	if (document.fonts && document.fonts.ready) {

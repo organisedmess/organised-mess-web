@@ -98,7 +98,10 @@ html {
 	font-size: var(--base-size);
 	min-height: var(--viewport-height);
 	touch-action: manipulation;
+	background-color: #d4d4d4;     /* what shows past the page edge: the sheet's mid grey, never white */
 }
+/* no rubber-band: on iOS (Safari and in-app browsers) the page would bounce under the fixed pills */
+html, body { overscroll-behavior: none; }
 html.mobile {
 	font-size: calc(var(--base-size) * var(--mobile-scale));
 	--pill-h: max(1.65rem, 34px);          /* touch target */
@@ -562,6 +565,7 @@ a.pill:hover { background: rgba(255, 255, 255, 0.34); }
 	top: 0;
 	left: 0;
 	height: calc(0.5px + 100vh);
+	height: calc(0.5px + 100lvh);   /* the largest viewport: still covered when the browser bars slide away */
 	width: var(--backdrop-width, 100%);
 	overflow: hidden;
 	opacity: 0;
