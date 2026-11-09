@@ -34,7 +34,7 @@
 		'  pull += d * (m.z * 0.35 * k);',
 		// the paper also twists as it is drawn in — the sense of the twist flips in bands, so it eddies both ways
 		'  float band = sin(sqrt(r2) / R * 5.0 + seed * 2.3 + uTime * 0.25);',
-		'  pull += vec2(-d.y, d.x) * (m.z * 0.45 * k * band);',                      // sample further out: the paper is drawn in towards the mass
+		'  pull += vec2(-d.y, d.x) * (m.z * 0.12 * k * band);',                      // sample further out: the paper is drawn in towards the mass
 		'  depth += m.z * k;',
 		'  slope += m.z * d * (-2.0 * R2 * R / ((r2 + R2) * (r2 + R2)));',
 		'}',
