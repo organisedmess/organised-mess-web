@@ -29,33 +29,43 @@
 		'  return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y); }',
 		'float fbm(vec2 p){ float s = 0.0, a = 0.5; for (int i = 0; i < 4; i++){ s += a * noise(p); p = p * 2.03 + 17.1; a *= 0.5; } return s / 0.9375; }',
 		// a gathering point: how far the paper is drawn in towards it, and how much texture collects there
-		'void well(vec2 p, vec4 m, inout vec2 pull, inout float depth, inout vec2 slope){',
+		'void well(vec2 p, vec4 m, float seed, inout vec2 pull, inout float depth, inout vec2 slope){',
 		'  float R = m.w; vec2 d = p - m.xy; float r2 = dot(d, d), R2 = R * R, k = R2 / (r2 + R2);',
-		'  pull += d * (m.z * 0.5 * k);',                      // sample further out: the paper is drawn in towards the mass
+		'  pull += d * (m.z * 0.35 * k);',
+		// the paper also twists as it is drawn in — the sense of the twist flips in bands, so it eddies both ways
+		'  float band = sin(sqrt(r2) / R * 5.0 + seed * 2.3 + uTime * 0.25);',
+		'  pull += vec2(-d.y, d.x) * (m.z * 0.45 * k * band);',                      // sample further out: the paper is drawn in towards the mass
 		'  depth += m.z * k;',
 		'  slope += m.z * d * (-2.0 * R2 * R / ((r2 + R2) * (r2 + R2)));',
 		'}',
 		'void main(){',
 		'  vec2 px = vec2(vUv.x, 1.0 - vUv.y) * uRes / uScale;',   // css px, y down
 		'  vec2 pull = vec2(0.0); float depth = 0.0; vec2 slope = vec2(0.0);',
-		'  for (int i = 0; i < N; i++) well(px, uM[i], pull, depth, slope);',
+		'  for (int i = 0; i < N; i++) well(px, uM[i], float(i), pull, depth, slope);',
+		// and where texture collects it is churned by a curl field, so the grain runs every which way
+		'  float e = 6.0; vec2 cp = px * 0.008 + uTime * 0.03;',
+		'  vec2 curl = vec2(fbm(cp + vec2(0.0, 0.01)) - fbm(cp - vec2(0.0, 0.01)), fbm(cp - vec2(0.01, 0.0)) - fbm(cp + vec2(0.01, 0.0))) / 0.02;',
+		'  pull += curl * smoothstep(0.3, 1.4, depth) * 26.0;',
 		'  vec2 q = px + pull;',                                 // the sheet as it lies, warped by the masses
 		'  float H = uRes.y / uScale;',
 		'  float t = clamp(q.y / H, 0.0, 1.0);',
 		'  vec3 col = mix(uTop, uBottom, smoothstep(-0.15, 1.1, t));',
 		// D: how much texture has collected here. No shading — the tone comes only from grain and paper.
-		'  float D = smoothstep(0.45, 1.5, depth);',   // the dispersed fields overlap to ~0.5: texture only starts to collect above that
+		'  float D = smoothstep(0.4, 1.15, depth);',   // the dispersed fields overlap to ~0.5: texture only starts to collect above that
 		// paper: the tooth roughens where texture collects; a slow mottle underneath, both carried by the pull
 		'  float tooth = noise(q * uScale * 0.21 + 3.0) * 0.6 + noise(q * uScale * 0.07 + 9.0) * 0.4;',
 		'  float mottle = fbm(q * 0.006 + vec2(uTime * 0.004, -uTime * 0.003));',
 		'  float lum = (tooth - 0.5) * 0.035 * (1.0 + D * 2.0) + (mottle - 0.5) * 0.09 + (depth - 0.5) * -0.03;',
 		// grain on the device grid, drawn in with the paper; it coarsens and gets heavier where it collects
 		'  vec2 dev = gl_FragCoord.xy + pull * uScale * vec2(1.0, -1.0);',
-		'  vec2 gc = floor(dev / (1.0 + D * 1.2));',
+		// the grain cells are turned to a different angle patch by patch, so streaks don't all lie the same way
+		'  float ang = fbm(q * 0.012 + 40.0) * 12.566;',
+		'  vec2 rd = mat2(cos(ang), sin(ang), -sin(ang), cos(ang)) * dev;',
+		'  vec2 gc = floor(rd / (1.0 + D * 1.2));',
 		'  vec2 gp = gc * mat2(0.76, 0.65, -0.65, 0.76) + vec2(uGrainTime * 17.3, uGrainTime * 31.7);',
 		'  lum += (hash(gp) - 0.5) * 0.085 * (1.0 + D * 1.2);',
 		// and it packs into specks — a stochastic screen whose coverage follows D, like ink on a riso drum
-		'  float speck = step(hash(gp * 1.37 + 11.0), D * 0.3);',
+		'  float speck = step(hash(gp * 1.37 + 11.0), D * 0.36);',
 		'  lum -= speck * (0.09 + 0.06 * hash(gp + 5.0));',
 		'  gl_FragColor = vec4(clamp(col + lum, 0.0, 1.0), 1.0);',
 		'}'
