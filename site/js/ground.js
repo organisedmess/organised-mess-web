@@ -31,10 +31,7 @@
 		// a gathering point: how far the paper is drawn in towards it, and how much texture collects there
 		'void well(vec2 p, vec4 m, float seed, inout vec2 pull, inout float depth, inout vec2 slope){',
 		'  float R = m.w; vec2 d = p - m.xy; float r2 = dot(d, d), R2 = R * R, k = R2 / (r2 + R2);',
-		'  pull += d * (m.z * 0.35 * k);',
-		// the paper also twists as it is drawn in — the sense of the twist flips in bands, so it eddies both ways
-		'  float band = sin(sqrt(r2) / R * 5.0 + seed * 2.3 + uTime * 0.25);',
-		'  pull += vec2(-d.y, d.x) * (m.z * 0.12 * k * band);',                      // sample further out: the paper is drawn in towards the mass
+		'  pull += d * (m.z * 0.35 * k);',                                     // sample further out: the paper is drawn in
 		'  depth += m.z * k;',
 		'  slope += m.z * d * (-2.0 * R2 * R / ((r2 + R2) * (r2 + R2)));',
 		'}',
@@ -42,8 +39,8 @@
 		'  vec2 px = vec2(vUv.x, 1.0 - vUv.y) * uRes / uScale;',   // css px, y down
 		'  vec2 pull = vec2(0.0); float depth = 0.0; vec2 slope = vec2(0.0);',
 		'  for (int i = 0; i < N; i++) well(px, uM[i], float(i), pull, depth, slope);',
-		// and where texture collects it is churned by a curl field, so the grain runs every which way
-		'  float e = 6.0; vec2 cp = px * 0.008 + uTime * 0.03;',
+		// where texture collects it is roughed up by a fixed curl field, so the grain lies every which way (the field does not move, so nothing swirls)
+		'  vec2 cp = px * 0.008;',
 		'  vec2 curl = vec2(fbm(cp + vec2(0.0, 0.01)) - fbm(cp - vec2(0.0, 0.01)), fbm(cp - vec2(0.01, 0.0)) - fbm(cp + vec2(0.01, 0.0))) / 0.02;',
 		'  pull += curl * smoothstep(0.3, 1.4, depth) * 26.0;',
 		'  vec2 q = px + pull;',                                 // the sheet as it lies, warped by the masses
