@@ -108,6 +108,10 @@ html.mobile {
 	--t-l: max(1.55rem, 18px);
 }
 
+/* text selection: ink on paper, inverted — swaps with the tokens after hours */
+::selection { background: var(--ink); color: var(--paper); text-shadow: none; }
+::-moz-selection { background: var(--ink); color: var(--paper); text-shadow: none; }
+
 body {
 	margin: 0;
 	min-height: var(--viewport-height);
