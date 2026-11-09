@@ -3,6 +3,12 @@
 Baseline: the live Cargo site as pulled on 15 Oct 2026. Everything below is
 what differs in `site/`.
 
+## Background (9 Nov 2026)
+
+- All the generative systems (Router, Drift and the cellular automata / reaction–diffusion / agent sims) and the System pill are gone. `js/backdrop.js` is replaced by `js/ground.js`: one shader, no simulation.
+- The sheet is the favicon's gradient (#ececec → #b4b4b4) with paper tooth, a slow mottle and film grain. A heavy mass follows the pointer on a soft, damped spring and sinks into it — the paper, mottle and grain are pulled in around it and it darkens, lit from the top left — with a slower second mass trailing as the sheet's memory. With no pointer (touch, idle) the mass wanders slowly on its own. After hours it slows and stops following.
+- Footer is two pills now: studio status left, © right.
+
 ## Platform
 
 - Cargo-hosted → static HTML/CSS/JS in `site/`, deployable to Cloudflare Pages (`_redirects`, `_headers`, README).

@@ -8,7 +8,7 @@ site/
 ├── index.html          the whole site (home + footer + Capabilities overlay)
 ├── css/site.css        tokens, type, home, footer, overlay, backdrop mechanics
 ├── js/site.js          base unit + mobile class, widow fix, overlay routing
-├── js/backdrop.js      WebGL backdrops: liquid | rd | caustic (older slitscan.js / liquid.js kept, unused)
+├── js/ground.js        the background: grainy grey sheet with a heavy mass that follows the pointer
 ├── fonts/              ABC Diatype (Thin 200) + ABC Gaisyr (Light 300), woff2
 ├── assets/             slitscan source image, favicon, OG image
 ├── internal/           studio-only pages behind one login (see below): index + tools/
