@@ -6,7 +6,7 @@ what differs in `site/`.
 ## Background (9 Nov 2026)
 
 - All the generative systems (Router, Drift and the cellular automata / reaction–diffusion / agent sims) and the System pill are gone. `js/backdrop.js` is replaced by `js/ground.js`: one shader, no simulation.
-- The sheet is the favicon's gradient (#ececec → #b4b4b4) with paper tooth, a slow mottle and film grain. A heavy mass follows the pointer on a soft, damped spring and sinks into it — the paper, mottle and grain are pulled in around it and it darkens, lit from the top left — with a slower second mass trailing as the sheet's memory. With no pointer (touch, idle) the mass wanders slowly on its own. After hours it slows and stops following.
+- The sheet is the favicon's gradient (#ececec → #b4b4b4) with paper tooth, a slow mottle and film grain — no shading anywhere. Five gathering points rest on it, dispersed (grain spread thin and wide) and drifting slowly. While the pointer moves, the nearest one gathers and follows it on a slow, damped spring: the paper is drawn in, the tooth roughens, the grain coarsens and packs into specks. When the pointer stops it lets go and the grain spreads out again where it is. With no pointer (touch, idle) they only drift. After hours everything slows and stops following.
 - Footer is two pills now: studio status left, © right.
 
 ## Platform

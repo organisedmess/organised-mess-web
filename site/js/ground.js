@@ -1,10 +1,11 @@
 /* organisedmess.studio — ground.js
  *
- * The background: a grainy grey sheet with a few heavy masses resting on it.
- * At rest each mass is dispersed — wide, shallow, faint — and drifts very slowly.
- * When the pointer moves, the mass nearest to it gathers — tight, deep, dark — and is
- * pulled after the pointer on a slow, damped spring; when the pointer stops it lets go
- * and spreads out again where it is. No simulation, one shader per frame.
+ * The background: a grey sheet of paper and grain, and a few places where that texture collects.
+ * At rest each one is dispersed — the grain spread thin and wide — and drifts very slowly.
+ * When the pointer moves, the one nearest it gathers: the paper is drawn in, the grain
+ * coarsens and packs into specks, and it is pulled after the pointer on a slow, damped
+ * spring; when the pointer stops it lets go and the grain spreads out again where it is.
+ * No shading and no simulation — one shader per frame.
  *
  * Exposes window.Backdrop = { instances: [ground] } with the small API site.js uses for
  * the after-hours state: setSpeedScale(s), settings.mouse_interaction, ready.
@@ -27,10 +28,10 @@
 		'float noise(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);',
 		'  return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y); }',
 		'float fbm(vec2 p){ float s = 0.0, a = 0.5; for (int i = 0; i < 4; i++){ s += a * noise(p); p = p * 2.03 + 17.1; a *= 0.5; } return s / 0.9375; }',
-		// a well: f is how far the sheet is pulled in (0 at a distance, S at the centre), g its slope
+		// a gathering point: how far the paper is drawn in towards it, and how much texture collects there
 		'void well(vec2 p, vec4 m, inout vec2 pull, inout float depth, inout vec2 slope){',
 		'  float R = m.w; vec2 d = p - m.xy; float r2 = dot(d, d), R2 = R * R, k = R2 / (r2 + R2);',
-		'  pull += d * (m.z * 0.9 * k);',                      // sample further out: the paper is drawn in towards the mass
+		'  pull += d * (m.z * 0.5 * k);',                      // sample further out: the paper is drawn in towards the mass
 		'  depth += m.z * k;',
 		'  slope += m.z * d * (-2.0 * R2 * R / ((r2 + R2) * (r2 + R2)));',
 		'}',
@@ -42,16 +43,20 @@
 		'  float H = uRes.y / uScale;',
 		'  float t = clamp(q.y / H, 0.0, 1.0);',
 		'  vec3 col = mix(uTop, uBottom, smoothstep(-0.15, 1.1, t));',
-		// paper: tooth and a slow mottle, both carried by the warp so they are visibly pulled in
+		// D: how much texture has collected here. No shading — the tone comes only from grain and paper.
+		'  float D = smoothstep(0.45, 1.5, depth);',   // the dispersed fields overlap to ~0.5: texture only starts to collect above that
+		// paper: the tooth roughens where texture collects; a slow mottle underneath, both carried by the pull
 		'  float tooth = noise(q * uScale * 0.21 + 3.0) * 0.6 + noise(q * uScale * 0.07 + 9.0) * 0.4;',
 		'  float mottle = fbm(q * 0.006 + vec2(uTime * 0.004, -uTime * 0.003));',
-		'  float lum = (tooth - 0.5) * 0.035 + (mottle - 0.5) * 0.11;',
-		// the dent: a little darker at the bottom, lit from the top left along its slope
-		'  lum -= depth * depth * 0.16;',
-		'  lum += dot(slope, normalize(vec2(-0.55, -0.85))) * 0.16;',
-		// grain on the device grid, pulled in with the sheet near the mass
-		'  vec2 gp = (gl_FragCoord.xy + pull * uScale * vec2(1.0, -1.0)) * mat2(0.76, 0.65, -0.65, 0.76) + vec2(uGrainTime * 17.3, uGrainTime * 31.7);',
-		'  lum += (hash(gp) - 0.5) * 0.085 * (1.0 + depth * 0.9);',   // the paper is packed tighter in the well, so the grain is heavier there
+		'  float lum = (tooth - 0.5) * 0.035 * (1.0 + D * 2.0) + (mottle - 0.5) * 0.09 + (depth - 0.5) * -0.03;',
+		// grain on the device grid, drawn in with the paper; it coarsens and gets heavier where it collects
+		'  vec2 dev = gl_FragCoord.xy + pull * uScale * vec2(1.0, -1.0);',
+		'  vec2 gc = floor(dev / (1.0 + D * 1.2));',
+		'  vec2 gp = gc * mat2(0.76, 0.65, -0.65, 0.76) + vec2(uGrainTime * 17.3, uGrainTime * 31.7);',
+		'  lum += (hash(gp) - 0.5) * 0.085 * (1.0 + D * 1.2);',
+		// and it packs into specks — a stochastic screen whose coverage follows D, like ink on a riso drum
+		'  float speck = step(hash(gp * 1.37 + 11.0), D * 0.3);',
+		'  lum -= speck * (0.09 + 0.06 * hash(gp + 5.0));',
 		'  gl_FragColor = vec4(clamp(col + lum, 0.0, 1.0), 1.0);',
 		'}'
 	].join('\n');
