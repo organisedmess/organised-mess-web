@@ -12,6 +12,7 @@
 //  · wrangler.jsonc lists /internal* in run_worker_first — otherwise the static files under /internal
 //    would be served straight from the asset cache without ever reaching this check.
 //  · anything added under site/internal/ is covered; add a row to site/internal/index.html to list it.
+//  · optional secret AGENT_TOKEN (32+ characters): lets an agent call the admin API with a bearer token; see internal().
 //  · /internal/admin/* is handed, after the same login, to the private admin Worker (service binding ADMIN,
 //    see wrangler.jsonc). That Worker has no public address; its code and data live in a separate private repo.
 //  · /internal/tools/api/state keeps each tool's location + condition in KV (binding TOOLS_KV,
@@ -264,6 +265,21 @@ async function internal(request, env, url) {
 		const exp = Date.now() + INTERNAL_SESSION_DAYS * 86400 * 1000;
 		const token = exp + '.' + (await internalSign(String(exp), env));
 		return bounce(next, internalCookie(token, exp, url));
+	}
+
+	// An agent (Claude) may use the admin API with a token instead of the login: secret AGENT_TOKEN, sent as
+	// "Authorization: Bearer …". Only /internal/admin/api/*, never the pages; it can read and write but not delete,
+	// and what it writes is marked in the activity log. No secret set = no token access.
+	if (url.pathname.startsWith(INTERNAL + '/admin/api/')) {
+		const auth = request.headers.get('Authorization') || '';
+		if (auth.startsWith('Bearer ')) {
+			const ok = env.AGENT_TOKEN && String(env.AGENT_TOKEN).length >= 32 && (await sameString(auth.slice(7).trim(), env.AGENT_TOKEN));
+			if (!ok) { await new Promise(r => setTimeout(r, 700)); return json({ error: 'bad token' }, 401); }
+			if (request.method === 'DELETE') return json({ error: 'the agent token cannot delete' }, 403);
+			const h = new Headers(request.headers);
+			h.delete('Authorization'); h.set('X-OM-Note', 'agent');
+			return adminPass(new Request(request, { headers: h }), env);
+		}
 	}
 
 	if (await internalSession(request, env)) {
