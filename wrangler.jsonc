@@ -32,5 +32,13 @@
 			"id": "042433a2ee98480f948c82b3ff607a2f",
 			"remote": true
 		}
+	],
+	// ADMIN: the private admin Worker (quotations, invoices, letters). It has no public address;
+	// worker.js passes /internal/admin/* to it once the /internal login has been checked.
+	"services": [
+		{
+			"binding": "ADMIN",
+			"service": "organised-mess-admin"
+		}
 	]
 }

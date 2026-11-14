@@ -12,6 +12,8 @@
 //  · wrangler.jsonc lists /internal* in run_worker_first — otherwise the static files under /internal
 //    would be served straight from the asset cache without ever reaching this check.
 //  · anything added under site/internal/ is covered; add a row to site/internal/index.html to list it.
+//  · /internal/admin/* is handed, after the same login, to the private admin Worker (service binding ADMIN,
+//    see wrangler.jsonc). That Worker has no public address; its code and data live in a separate private repo.
 //  · /internal/tools/api/state keeps each tool's location + condition in KV (binding TOOLS_KV,
 //    see wrangler.jsonc). Without the binding the page falls back to the browser's localStorage.
 //
@@ -230,6 +232,7 @@ async function internal(request, env, url) {
 	if (await internalSession(request, env)) {
 		if (url.pathname === INTERNAL + '/login') return bounce(INTERNAL_HOME);
 		if (url.pathname === INTERNAL + '/tools/api/state') return toolsState(request, env);
+		if (url.pathname === INTERNAL + '/admin' || url.pathname.startsWith(INTERNAL + '/admin/')) return adminPass(request, env);
 		const res = await env.ASSETS.fetch(request);
 		const out = new Response(res.body, res);
 		out.headers.set('Cache-Control', 'private, no-store');
@@ -342,6 +345,16 @@ function internalLogin(next, error, status) {
 		status,
 		headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex, nofollow' }
 	});
+}
+
+/* ---- /internal/admin/*: the private admin Worker, behind this login ---------- */
+async function adminPass(request, env) {
+	if (!env.ADMIN) return new Response('Admin is not connected (service binding ADMIN).', { status: 503 });
+	const res = await env.ADMIN.fetch(request);
+	const out = new Response(res.body, res);
+	out.headers.set('Cache-Control', 'private, no-store');
+	out.headers.set('X-Robots-Tag', 'noindex, nofollow');
+	return out;
 }
 
 /* ---- /internal/tools/api/state: per-tool location + condition in KV --------- */
