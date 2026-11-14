@@ -32,12 +32,19 @@ const INTERNAL = '/internal';
 const INTERNAL_HOME = INTERNAL + '/';      // assets serve /internal/index.html at /internal/
 const INTERNAL_COOKIE = 'om_internal';
 const INTERNAL_SESSION_DAYS = 30;
+// The internal area lives on its own host. There its pages are served from the root
+// (internal.organisedmess.studio/tools/ is site/internal/tools/); on the main site, /internal/* redirects to it.
+const INTERNAL_HOST = 'internal.organisedmess.studio';
+const MAIN_HOSTS = ['organisedmess.studio', 'www.organisedmess.studio'];
 
 export default {
 	async fetch(request, env) {
 		const url = new URL(request.url);
+		if (url.hostname === INTERNAL_HOST) return internalHost(request, env, url);
 		let res;
-		if (url.pathname === INTERNAL || url.pathname.startsWith(INTERNAL + '/')) {
+		if (MAIN_HOSTS.includes(url.hostname) && (url.pathname === INTERNAL || url.pathname.startsWith(INTERNAL + '/'))) {
+			res = Response.redirect('https://' + INTERNAL_HOST + (url.pathname.slice(INTERNAL.length) || '/') + url.search, 301);
+		} else if (url.pathname === INTERNAL || url.pathname.startsWith(INTERNAL + '/')) {
 			res = await internal(request, env, url);
 		} else if (url.pathname === '/tools' || url.pathname.startsWith('/tools/')) {
 			// the inventory used to live at /tools
@@ -203,6 +210,36 @@ function json(body, status) {
 	return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
 }
 
+/* ---- internal.organisedmess.studio: the internal area on its own host ------ */
+// Everything is still written and stored as /internal/… (the files in site/internal, the links in those pages,
+// the login form). This maps the short address onto it and back:
+//  · /tools/ is handled as /internal/tools/; shared static files (/css, /js, /fonts, /assets) are served as they are
+//  · a GET for an old-style /internal/… link is redirected to the short address; a POST is handled in place
+//  · redirects and the session cookie that come back are rewritten for the root of this host
+async function internalHost(request, env, url) {
+	const p = url.pathname;
+	if (p === '/robots.txt') return new Response('User-agent: *\nDisallow: /\n', { headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+	if (/^\/(css|js|fonts|assets|snippets)\//.test(p) || /^\/(favicon\.ico|apple-touch-icon\.png)$/.test(p)) return env.ASSETS.fetch(request);
+	let inner = p;
+	if (p === INTERNAL || p.startsWith(INTERNAL + '/')) {
+		if (request.method === 'GET' || request.method === 'HEAD') {
+			return new Response(null, { status: 301, headers: { Location: (p.slice(INTERNAL.length) || '/') + url.search } });
+		}
+	} else {
+		inner = INTERNAL + p;
+	}
+	const iu = new URL(url);
+	iu.pathname = inner;
+	const res = await internal(new Request(iu.toString(), request), env, iu);
+	const out = new Response(res.body, res);
+	const loc = out.headers.get('Location');
+	if (loc && (loc === INTERNAL || loc.startsWith(INTERNAL + '/'))) out.headers.set('Location', loc.slice(INTERNAL.length) || '/');
+	const ck = out.headers.get('Set-Cookie');
+	if (ck) out.headers.set('Set-Cookie', ck.replace('Path=' + INTERNAL + ';', 'Path=/;'));
+	out.headers.set('X-Robots-Tag', 'noindex, nofollow');
+	return out;
+}
+
 /* ---- /internal: login gate ---------------------------------------------- */
 
 async function internal(request, env, url) {
@@ -337,7 +374,7 @@ function internalLogin(next, error, status) {
 				</div>
 			</form>
 		</div>
-		<p class="tools-login-back"><a class="pill" href="/"><span class="arr arr-back">←</span>&nbsp;Back to the studio</a></p>
+		<p class="tools-login-back"><a class="pill" href="https://organisedmess.studio/"><span class="arr arr-back">←</span>&nbsp;Back to the studio</a></p>
 	</main>
 </body>
 </html>`;

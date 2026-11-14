@@ -9,15 +9,10 @@
 		"directory": "./site",
 		"binding": "ASSETS",
 		"not_found_handling": "404-page",
-		// /internal is login-gated in worker.js, so its files must not be served straight from the
-		// asset cache; everything else still skips the Worker when a static file matches.
-		// (/tools is the old address of the inventory; the Worker redirects it.)
-		"run_worker_first": [
-			"/internal",
-			"/internal/*",
-			"/tools",
-			"/tools/*"
-		]
+		// Every request runs worker.js first. It has to: the internal area is on its own host
+		// (internal.organisedmess.studio, a custom domain on this Worker) where any path may be login-gated,
+		// so no file may be served straight from the asset cache. Public pages are passed on to the assets.
+		"run_worker_first": true
 	},
 	// outbound email: SMTP to Google Workspace from the Worker, as GMAIL_USER. Secrets set in the
 	// dashboard (never here): GMAIL_APP_PASSWORD, TURNSTILE_SECRET.
