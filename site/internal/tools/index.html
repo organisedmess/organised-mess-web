@@ -73,5 +73,7 @@
 </main>
 
 <script src="/internal/tools/tools.js" defer></script>
+	<!-- Claude panel: served by the private admin Worker, only reachable after the internal login -->
+	<script>(function(){var b=location.pathname.indexOf("/internal/")===0?"/internal/admin":"/admin";var s=document.createElement("script");s.src=b+"/docs/chat-dock.js";s.defer=true;document.head.appendChild(s);})();</script>
 </body>
 </html>
