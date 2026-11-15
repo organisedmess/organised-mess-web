@@ -33,6 +33,14 @@ const INTERNAL = '/internal';
 const INTERNAL_HOME = INTERNAL + '/';      // assets serve /internal/index.html at /internal/
 const INTERNAL_COOKIE = 'om_internal';
 const LOGIN_MAX_FAILS = 8;
+// Login details live in TOOLS_KV under AUTH_KEY once they have been set on the Account page (/internal/account):
+// { user, salt, hash (PBKDF2-SHA256), secret (signs the session cookie; replaced on every change, which signs out
+// every device), updated }. Before that, the INTERNAL_USER / INTERNAL_PASSWORD secrets are used.
+// BOOTSTRAP is a one-off temporary login (name "setup") that only opens the Account page, so the first details can be
+// set there. It stops working as soon as details are saved, or after its date. Only its salted hash is here.
+const AUTH_KEY = 'internal-auth-v1';
+const PBKDF2_ITERATIONS = 100000;
+const BOOTSTRAP = { user: 'setup', salt: 'b1494ba6a85679a7fbb598a81e3fcab2', hash: 'f589cd41abc797d556e363407f324253ca06749805398a9ab4ee2d1c64bca3f7', until: Date.parse('2026-11-23T00:00:00+08:00') };
 const INTERNAL_SESSION_DAYS = 30;
 // The internal area lives on its own host. There its pages are served from the root
 // (internal.organisedmess.studio/tools/ is site/internal/tools/); on the main site, /internal/* redirects to it.
@@ -245,7 +253,8 @@ async function internalHost(request, env, url) {
 /* ---- /internal: login gate ---------------------------------------------- */
 
 async function internal(request, env, url) {
-	if (!env.INTERNAL_USER || !env.INTERNAL_PASSWORD) {
+	const rec = await authRecord(env);
+	if (!rec && !(env.INTERNAL_USER && env.INTERNAL_PASSWORD) && Date.now() > BOOTSTRAP.until) {
 		return new Response('Internal login is not configured (set INTERNAL_USER and INTERNAL_PASSWORD).', { status: 503 });
 	}
 
@@ -265,17 +274,15 @@ async function internal(request, env, url) {
 			await new Promise(r => setTimeout(r, 700));
 			return internalLogin(next, 'Too many tries. Wait half an hour and try again.', 429);
 		}
-		const ok = (await sameString(String(f.user || ''), env.INTERNAL_USER)) &&
-		           (await sameString(String(f.pass || ''), env.INTERNAL_PASSWORD));
+		const ok = await checkLogin(String(f.user || ''), String(f.pass || ''), env, rec);
 		if (!ok) {
 			if (env.TOOLS_KV) await env.TOOLS_KV.put(failKey, String(fails + 1), { expirationTtl: 1800 });
 			await new Promise(r => setTimeout(r, 700)); // blunt the obvious brute force
 			return internalLogin(next, 'Those details did not match.', 401);
 		}
 		if (fails && env.TOOLS_KV) await env.TOOLS_KV.delete(failKey);
-		const exp = Date.now() + INTERNAL_SESSION_DAYS * 86400 * 1000;
-		const token = exp + '.' + (await internalSign(String(exp), env));
-		return bounce(next, internalCookie(token, exp, url));
+		const { token, exp } = await newSession(ok, env, rec);
+		return bounce(ok === 'temp' ? INTERNAL + '/account' : next, internalCookie(token, exp, url));
 	}
 
 	// An agent (Claude) may use the admin API with a token instead of the login: secret AGENT_TOKEN, sent as
@@ -293,7 +300,11 @@ async function internal(request, env, url) {
 		}
 	}
 
-	if (await internalSession(request, env)) {
+	const session = await internalSession(request, env, rec);
+	if (session) {
+		if (url.pathname === INTERNAL + '/account') return request.method === 'POST' ? accountPost(request, env, url, session, rec) : accountPage(session, rec, env, url.searchParams.get('done'), '');
+		// the temporary login opens the Account page and nothing else
+		if (session.mode === 'temp') return url.pathname.includes('/api/') ? json({ error: 'set your login details first' }, 403) : bounce(INTERNAL + '/account');
 		if (url.pathname === INTERNAL + '/login') return bounce(INTERNAL_HOME);
 		if (url.pathname === INTERNAL + '/tools/api/state') return toolsState(request, env);
 		if (url.pathname === INTERNAL + '/admin' || url.pathname.startsWith(INTERNAL + '/admin/')) return adminPass(request, env);
@@ -306,20 +317,28 @@ async function internal(request, env, url) {
 	return internalLogin(internalNext(url.pathname + url.search), '', 401);
 }
 
-async function internalSession(request, env) {
+// → { mode: 'full' | 'temp' } or null. Cookie: <expiry>.<mode>.<signature> (older <expiry>.<signature> = full)
+async function internalSession(request, env, rec) {
 	const m = (request.headers.get('Cookie') || '').match(new RegExp('(?:^|;\\s*)' + INTERNAL_COOKIE + '=([^;]+)'));
-	if (!m) return false;
-	const [exp, sig] = m[1].split('.');
-	if (!exp || !sig || Number(exp) < Date.now()) return false;
-	return sameString(sig, await internalSign(exp, env));
+	if (!m) return null;
+	const parts = m[1].split('.');
+	const exp = parts[0], mode = parts.length === 3 ? parts[1] : 'full', sig = parts[parts.length - 1];
+	if (!exp || !sig || Number(exp) < Date.now() || (mode !== 'full' && mode !== 'temp')) return null;
+	if (mode === 'temp' && (rec || Date.now() > BOOTSTRAP.until)) return null;
+	const msg = parts.length === 3 ? exp + '.' + mode : exp;
+	return (await sameString(sig, await internalSign(msg, env, rec))) ? { mode } : null;
 }
-async function internalKey(env) {
-	const material = [env.INTERNAL_USER, env.INTERNAL_PASSWORD, env.INTERNAL_SECRET || ''].join('\u0000');
+async function newSession(mode, env, rec) {
+	const exp = Date.now() + (mode === 'temp' ? 3600e3 : INTERNAL_SESSION_DAYS * 86400 * 1000);
+	return { exp, token: exp + '.' + mode + '.' + (await internalSign(exp + '.' + mode, env, rec)) };
+}
+async function internalKey(env, rec) {
+	const material = rec ? ['v2', rec.secret, env.INTERNAL_SECRET || ''].join('\u0000') : [env.INTERNAL_USER, env.INTERNAL_PASSWORD, env.INTERNAL_SECRET || ''].join('\u0000');
 	const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(material));
 	return crypto.subtle.importKey('raw', digest, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
 }
-async function internalSign(msg, env) {
-	const sig = await crypto.subtle.sign('HMAC', await internalKey(env), new TextEncoder().encode(msg));
+async function internalSign(msg, env, rec) {
+	const sig = await crypto.subtle.sign('HMAC', await internalKey(env, rec), new TextEncoder().encode(msg));
 	return [...new Uint8Array(sig)].map(b => b.toString(16).padStart(2, '0')).join('');
 }
 // constant-time compare of two strings via their digests (length leaks nothing)
@@ -351,7 +370,112 @@ function internalNext(v) {
 }
 const escHtml = (s) => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+/* ---- login details: stored hash, checks, the Account page --------------- */
+async function authRecord(env) {
+	if (!env.TOOLS_KV) return null;
+	try { const r = await env.TOOLS_KV.get(AUTH_KEY, 'json'); return r && r.user && r.hash && r.salt && r.secret ? r : null; } catch (e) { return null; }
+}
+const toHex = (u8) => [...new Uint8Array(u8)].map(b => b.toString(16).padStart(2, '0')).join('');
+const fromHex = (h) => new Uint8Array(String(h).match(/../g).map(x => parseInt(x, 16)));
+const randomHex = (n) => toHex(crypto.getRandomValues(new Uint8Array(n)));
+async function pbkdf2(pass, salt) {
+	const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(String(pass)), 'PBKDF2', false, ['deriveBits']);
+	return toHex(await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: fromHex(salt), iterations: PBKDF2_ITERATIONS }, key, 256));
+}
+// → 'full' | 'temp' | false
+async function checkLogin(user, pass, env, rec) {
+	if (rec) return (await sameString(user, rec.user)) & (await sameString(await pbkdf2(pass, rec.salt), rec.hash)) ? 'full' : false;
+	if (env.INTERNAL_USER && env.INTERNAL_PASSWORD && (await sameString(user, env.INTERNAL_USER)) & (await sameString(pass, env.INTERNAL_PASSWORD))) return 'full';
+	if (Date.now() < BOOTSTRAP.until && (await sameString(user, BOOTSTRAP.user)) & (await sameString(await pbkdf2(pass, BOOTSTRAP.salt), BOOTSTRAP.hash))) return 'temp';
+	return false;
+}
+async function checkPassword(pass, env, rec, session) {
+	if (session.mode === 'temp') return Date.now() < BOOTSTRAP.until && sameString(await pbkdf2(pass, BOOTSTRAP.salt), BOOTSTRAP.hash);
+	if (rec) return sameString(await pbkdf2(pass, rec.salt), rec.hash);
+	return !!env.INTERNAL_PASSWORD && sameString(pass, env.INTERNAL_PASSWORD);
+}
+async function accountPost(request, env, url, session, rec) {
+	let f = {};
+	try { (await request.formData()).forEach((v, k) => { f[k] = String(v); }); } catch (e) {}
+	const ip = request.headers.get('CF-Connecting-IP') || 'unknown', failKey = 'login-fail:' + ip;
+	const fails = env.TOOLS_KV ? Number(await env.TOOLS_KV.get(failKey)) || 0 : 0;
+	const again = (msg, status) => accountPage(session, rec, env, '', msg, status || 400);
+	if (fails >= LOGIN_MAX_FAILS) return again('Too many tries. Wait half an hour and try again.', 429);
+	if (!env.TOOLS_KV) return again('Storage is not connected (TOOLS_KV), so details cannot be saved here.', 503);
+	if (!(await checkPassword(f.current || '', env, rec, session))) {
+		await env.TOOLS_KV.put(failKey, String(fails + 1), { expirationTtl: 1800 });
+		await new Promise(r => setTimeout(r, 700));
+		return again('Your current password did not match.', 401);
+	}
+	let next;
+	if (f.action === 'signout') {
+		if (!rec) return again('Set your own details first.');
+		next = Object.assign({}, rec, { secret: randomHex(32), updated: new Date().toISOString() });
+	} else {
+		const user = (f.user || '').trim(), pass = f.pass || '';
+		if (!/^[A-Za-z0-9._@-]{3,64}$/.test(user)) return again('The name must be 3–64 letters, numbers or . _ @ -');
+		if (user.toLowerCase() === BOOTSTRAP.user) return again('Choose a name other than “setup”.');
+		if (pass.length < 12) return again('Use a password of at least 12 characters.');
+		if (pass.length > 200) return again('That password is too long.');
+		if (pass !== (f.pass2 || '')) return again('The two new passwords are not the same.');
+		if (pass === f.current) return again('Choose a password different from the current one.');
+		const salt = randomHex(16);
+		next = { user, salt, hash: await pbkdf2(pass, salt), secret: randomHex(32), updated: new Date().toISOString() };
+	}
+	await env.TOOLS_KV.put(AUTH_KEY, JSON.stringify(next));
+	if (fails) await env.TOOLS_KV.delete(failKey);
+	const { token, exp } = await newSession('full', env, next);
+	return bounce(INTERNAL + '/account?done=' + (f.action === 'signout' ? 'signout' : 'saved'), internalCookie(token, exp, url));
+}
+function accountPage(session, rec, env, done, error, status) {
+	const temp = session.mode === 'temp';
+	const note = done === 'saved' ? 'Saved. Use your new name and password from now on — every other device has been signed out.'
+		: done === 'signout' ? 'Every other device has been signed out.' : '';
+	const field = (name, label, type, ac, extra, id) => `<div class="field"><label for="a-${id || name}">${label}</label><input id="a-${id || name}" name="${name}" type="${type}" autocomplete="${ac}" autocapitalize="off" spellcheck="false" required ${extra || ''}></div>`;
+	const body = `
+			<form class="tools-login-form" method="post" action="${INTERNAL}/account">
+				<input type="hidden" name="action" value="change">
+				<p class="tools-login-intro">${temp ? 'You are signed in with the temporary login. Choose your own name and password to continue — the temporary one stops working once you save.' : 'Change the name and password for the internal pages. Saving signs out every other device.'}${rec && !temp ? ' Last changed ' + escHtml(String(rec.updated).slice(0, 10)) + '.' : ''}</p>
+				${field('current', temp ? 'Temporary password' : 'Current password', 'password', 'current-password', 'autofocus')}
+				${field('user', 'New name', 'text', 'username', 'minlength="3" maxlength="64" value="' + escHtml(rec && !temp ? rec.user : '') + '"')}
+				${field('pass', 'New password (12+ characters)', 'password', 'new-password', 'minlength="12"')}
+				${field('pass2', 'New password again', 'password', 'new-password', 'minlength="12"')}
+				<div class="tools-login-actions">
+					<button class="tools-send" type="submit">Save&nbsp;<span class="arr">→</span></button>
+					${error ? `<p class="tools-login-error" role="alert">${escHtml(error)}</p>` : note ? `<p class="tools-login-intro" role="status">${escHtml(note)}</p>` : ''}
+				</div>
+			</form>${rec && !temp ? `
+			<form class="tools-login-form" method="post" action="${INTERNAL}/account">
+				<input type="hidden" name="action" value="signout">
+				<p class="tools-login-intro">Lost a device? Sign out everywhere except here.</p>
+				${field('current', 'Current password', 'password', 'current-password', '', 'current2')}
+				<div class="tools-login-actions"><button class="tools-send" type="submit">Sign out other devices&nbsp;<span class="arr">→</span></button></div>
+			</form>` : ''}`;
+	const back = temp ? `<a class="pill" href="${INTERNAL}/logout">Log out</a>` : `<a class="pill" href="${INTERNAL_HOME}"><span class="arr arr-back">←</span>&nbsp;Back</a>`;
+	return internalPage('Account', body, back, status || 200);
+}
+
 function internalLogin(next, error, status) {
+	const body = `
+			<form class="tools-login-form" method="post" action="${INTERNAL}/login" autocomplete="on">
+				<input type="hidden" name="next" value="${escHtml(next)}">
+				<p class="tools-login-intro">Studio-only pages. Sign in to continue.</p>
+				<div class="field">
+					<label for="t-user">Name</label>
+					<input id="t-user" name="user" type="text" autocomplete="username" autocapitalize="off" spellcheck="false" required autofocus>
+				</div>
+				<div class="field">
+					<label for="t-pass">Password</label>
+					<input id="t-pass" name="pass" type="password" autocomplete="current-password" required>
+				</div>
+				<div class="tools-login-actions">
+					<button class="tools-send" type="submit">Enter&nbsp;<span class="arr">→</span></button>
+					${error ? `<p class="tools-login-error" role="alert">${escHtml(error)}</p>` : ''}
+				</div>
+			</form>`;
+	return internalPage('Internal', body, '<a class="pill" href="https://organisedmess.studio/"><span class="arr arr-back">←</span>&nbsp;Back to the studio</a>', status);
+}
+function internalPage(title, body, back, status) {
 	const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -383,25 +507,10 @@ function internalLogin(next, error, status) {
 <body class="tools tools-login-page">
 	<main class="page page-tools-login">
 		<div class="os-win tools-login-win" role="dialog" aria-labelledby="tools-login-title">
-			<div class="os-titlebar"><span class="os-dot" aria-hidden="true"></span><span class="os-title" id="tools-login-title">Internal</span><span class="os-meta">Organised Mess</span></div>
-			<form class="tools-login-form" method="post" action="${INTERNAL}/login" autocomplete="on">
-				<input type="hidden" name="next" value="${escHtml(next)}">
-				<p class="tools-login-intro">Studio-only pages. Sign in to continue.</p>
-				<div class="field">
-					<label for="t-user">Name</label>
-					<input id="t-user" name="user" type="text" autocomplete="username" autocapitalize="off" spellcheck="false" required autofocus>
-				</div>
-				<div class="field">
-					<label for="t-pass">Password</label>
-					<input id="t-pass" name="pass" type="password" autocomplete="current-password" required>
-				</div>
-				<div class="tools-login-actions">
-					<button class="tools-send" type="submit">Enter&nbsp;<span class="arr">→</span></button>
-					${error ? `<p class="tools-login-error" role="alert">${escHtml(error)}</p>` : ''}
-				</div>
-			</form>
+			<div class="os-titlebar"><span class="os-dot" aria-hidden="true"></span><span class="os-title" id="tools-login-title">${escHtml(title)}</span><span class="os-meta">Organised Mess</span></div>
+${body}
 		</div>
-		<p class="tools-login-back"><a class="pill" href="https://organisedmess.studio/"><span class="arr arr-back">←</span>&nbsp;Back to the studio</a></p>
+		<p class="tools-login-back">${back}</p>
 	</main>
 </body>
 </html>`;
