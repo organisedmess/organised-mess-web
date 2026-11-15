@@ -5,7 +5,10 @@
 //  · marks the workers.dev staging host noindex
 // Everything else passes straight through to the static assets.
 //
-// Internal login:
+// Internal login (one of two):
+//  · Cloudflare Access, when ACCESS_TEAM and ACCESS_AUD are set (see access.js): Access is the only login, every request
+//    must carry a valid Access token, and the password form below is not used. ACCESS_EMAILS optionally narrows who.
+//  · otherwise the site's own password form:
 //  · secrets INTERNAL_USER and INTERNAL_PASSWORD (optional INTERNAL_SECRET adds entropy to the cookie key).
 //  · a good login sets an HttpOnly, HMAC-signed cookie for 30 days, scoped to /internal; nothing about
 //    the credentials is stored client-side. Changing either secret logs every session out.
@@ -26,6 +29,7 @@
 //  · spam: Turnstile (secret TURNSTILE_SECRET; site key in index.html), plus a honeypot field,
 //    a minimum fill time and a per-IP rate limit.
 import { connect } from 'cloudflare:sockets';
+import { accessOn, accessIdentity } from './access.js';
 
 const MAX = { name: 120, email: 200, org: 120, message: 4000 };
 
@@ -245,6 +249,7 @@ async function internalHost(request, env, url) {
 /* ---- /internal: login gate ---------------------------------------------- */
 
 async function internal(request, env, url) {
+	if (accessOn(env)) return internalViaAccess(request, env, url);
 	if (!env.INTERNAL_USER || !env.INTERNAL_PASSWORD) {
 		return new Response('Internal login is not configured (set INTERNAL_USER and INTERNAL_PASSWORD).', { status: 503 });
 	}
@@ -304,6 +309,31 @@ async function internal(request, env, url) {
 		return out;
 	}
 	return internalLogin(internalNext(url.pathname + url.search), '', 401);
+}
+
+// Cloudflare Access is the login (ACCESS_TEAM + ACCESS_AUD set): no password form, no cookie of our own.
+async function internalViaAccess(request, env, url) {
+	const who = await accessIdentity(request, env);
+	if (!who) return new Response('Not signed in. Open https://' + INTERNAL_HOST + '/ to sign in.', { status: 403, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } });
+	if (url.pathname === INTERNAL + '/logout') return bounce('/cdn-cgi/access/logout');   // Access's own sign-out on this host
+	if (url.pathname === INTERNAL + '/login') return bounce(INTERNAL_HOME);
+	// the Claude Code agent: an Access service token AND the agent token, admin API only, no deletes
+	const auth = request.headers.get('Authorization') || '';
+	if (who.serviceToken || auth.startsWith('Bearer ')) {
+		const ok = url.pathname.startsWith(INTERNAL + '/admin/api/') && auth.startsWith('Bearer ') && env.AGENT_TOKEN && String(env.AGENT_TOKEN).length >= 32 && (await sameString(auth.slice(7).trim(), env.AGENT_TOKEN));
+		if (!ok) return json({ error: 'bad token' }, 401);
+		if (request.method === 'DELETE') return json({ error: 'the agent token cannot delete' }, 403);
+		const h = new Headers(request.headers);
+		h.delete('Authorization'); h.set('X-OM-Note', 'agent');
+		return adminPass(new Request(request, { headers: h }), env);
+	}
+	if (url.pathname === INTERNAL + '/tools/api/state') return toolsState(request, env);
+	if (url.pathname === INTERNAL + '/admin' || url.pathname.startsWith(INTERNAL + '/admin/')) return adminPass(request, env);
+	const res = await env.ASSETS.fetch(request);
+	const out = new Response(res.body, res);
+	out.headers.set('Cache-Control', 'private, no-store');
+	out.headers.set('X-Robots-Tag', 'noindex, nofollow');
+	return out;
 }
 
 async function internalSession(request, env) {
