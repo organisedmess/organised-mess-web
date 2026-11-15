@@ -32,6 +32,7 @@ const MAX = { name: 120, email: 200, org: 120, message: 4000 };
 const INTERNAL = '/internal';
 const INTERNAL_HOME = INTERNAL + '/';      // assets serve /internal/index.html at /internal/
 const INTERNAL_COOKIE = 'om_internal';
+const LOGIN_MAX_FAILS = 8;
 const INTERNAL_SESSION_DAYS = 30;
 // The internal area lives on its own host. There its pages are served from the root
 // (internal.organisedmess.studio/tools/ is site/internal/tools/); on the main site, /internal/* redirects to it.
@@ -256,12 +257,22 @@ async function internal(request, env, url) {
 		let f = {};
 		try { (await request.formData()).forEach((v, k) => { f[k] = v; }); } catch (e) {}
 		const next = internalNext(f.next);
+		// lockout: 8 wrong tries from one address → that address is refused for 30 minutes (counted in TOOLS_KV)
+		const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+		const failKey = 'login-fail:' + ip;
+		const fails = env.TOOLS_KV ? Number(await env.TOOLS_KV.get(failKey)) || 0 : 0;
+		if (fails >= LOGIN_MAX_FAILS) {
+			await new Promise(r => setTimeout(r, 700));
+			return internalLogin(next, 'Too many tries. Wait half an hour and try again.', 429);
+		}
 		const ok = (await sameString(String(f.user || ''), env.INTERNAL_USER)) &&
 		           (await sameString(String(f.pass || ''), env.INTERNAL_PASSWORD));
 		if (!ok) {
+			if (env.TOOLS_KV) await env.TOOLS_KV.put(failKey, String(fails + 1), { expirationTtl: 1800 });
 			await new Promise(r => setTimeout(r, 700)); // blunt the obvious brute force
 			return internalLogin(next, 'Those details did not match.', 401);
 		}
+		if (fails && env.TOOLS_KV) await env.TOOLS_KV.delete(failKey);
 		const exp = Date.now() + INTERNAL_SESSION_DAYS * 86400 * 1000;
 		const token = exp + '.' + (await internalSign(String(exp), env));
 		return bounce(next, internalCookie(token, exp, url));
