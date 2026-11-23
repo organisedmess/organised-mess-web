@@ -77,21 +77,21 @@ items carry a `title` (the product name shown as the row heading; `name` becomes
 ### /internal/components — electronics components and drawer cabinets
 
 `internal/components/` (index.html, components.js, components.css) tracks components and the six
-KTK drawer cabinets they live in: 2 × 30D (364 × 152 × 222), 2 × 17D (364 × 152 × 270), 2 × 9D (L)
-(364 × 152 × 206) — 112 drawers. Cabinets are A–F; a drawer address is the cabinet letter plus the
-drawer number read left to right, top to bottom (`A07`). Drawer sizes are derived from the outside
-dimensions (6 mm frame, 2 mm between drawers) and marked est. until measured — change `MODELS` at the
-top of components.js if the real layout differs.
+KTK drawer cabinets they live in, as two stacks on the bench, lettered top to bottom:
+left **A** 30D (364 × 152 × 222, 6 × 5) on **B** 9D (L) (364 × 152 × 206, 3 × 3) on **C** 17D
+(364 × 152 × 270); right **D** 30D on **E** 9D (L) on **F** 17D — 112 drawers. A drawer address is
+the cabinet letter plus the drawer number read left to right, top to bottom (`A07`). Drawer sizes
+are derived from the outside dimensions (6 mm frame, 2 mm between drawers) and marked est. until
+measured — change `MODELS` / `CAB_DEFAULT` at the top of components.js if the real layout differs.
+Lists saved with the first lettering (v1: A, B = 30D, C, D = 17D, E, F = 9D) are re-lettered on load.
 
-- **3D:** three.js 0.187 from jsDelivr (pinned in the page's import map). Drag to turn, tap a drawer to
-  open it; search lights up and pulls out matching drawers. Front / ¾ / Top views; *Arrange* sets
-  which cabinets stack where (presets + per-cabinet moves), saved with the list.
-- **Drawer maps:** each cabinet's front drawn to scale. Tap a drawer to plan it (category + label +
+- **Drawer maps:** the two stacks drawn flat, each cabinet's front to scale. Tap a drawer to plan it (category + label +
   note), see what's in it, or put unplaced parts in it.
 - **Parts:** name, category, value, package, part number, qty + unit, drawer size it needs (S/M/L),
   tags, notes, link, drawer + slot. Search matches values by meaning (10k = 10kΩ = 10 k, 0.1uF = 100nF,
   4k7 = 4.7k) and short/numeric terms as whole tokens. Chips: category, *Unplaced* (also lights up
   the free drawers), *In A07*. `?q=`, `?cat=`, `?d=` are shareable; `/` focuses search; ⌘Z undoes.
+- **Search** lights up the drawers that hold a match.
 - **Planning:** *Suggest places* fills unplaced parts into drawers already planned/used for their
   category, then into empty drawers of the right size next to them; preview first, then apply.
   *Select* ticks several parts to move, recategorise or unplace together.

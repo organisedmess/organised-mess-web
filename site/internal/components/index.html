@@ -39,13 +39,6 @@
 		});
 	})();
 	</script>
-	<!-- three.js for the 3D view (pinned). The list and drawer maps work without it. -->
-	<script type="importmap">
-	{ "imports": {
-		"three": "https://cdn.jsdelivr.net/npm/three@0.187.0/build/three.module.min.js",
-		"three/addons/": "https://cdn.jsdelivr.net/npm/three@0.187.0/examples/jsm/"
-	} }
-	</script>
 </head>
 <body class="tools internal comp">
 <a class="skip-link" href="#comp-main">Skip to content</a>
@@ -85,41 +78,17 @@
 			<button type="button" class="tools-chip" data-act="select" aria-pressed="false">Select</button>
 		</div>
 
-		<!-- 01 Cabinets in 3D -->
-		<section class="row comp-sec" id="sec-3d">
-			<div class="row-head"><span class="num">01</span><h2 class="row-label">Cabinets</h2>
-				<p class="cat-count">6 KTK drawer cabinets · drag to turn, tap a drawer to open it</p></div>
-			<div class="row-body">
-				<div class="os-win comp-win">
-					<div class="os-titlebar comp-titlebar">
-						<span class="os-dot" aria-hidden="true"></span>
-						<span class="os-title">Bench storage · 3D</span>
-						<span class="comp-views">
-							<button type="button" class="comp-mini" data-view="front">Front</button>
-							<button type="button" class="comp-mini" data-view="three">¾</button>
-							<button type="button" class="comp-mini" data-view="top">Top</button>
-							<button type="button" class="comp-mini" data-act="arrange">Arrange</button>
-						</span>
-					</div>
-					<div class="comp-stage" id="comp-stage">
-						<p class="comp-stage-msg" id="comp-stage-msg">Loading the 3D view…</p>
-					</div>
-					<div class="comp-legend" id="comp-legend"></div>
-				</div>
-			</div>
-		</section>
-
-		<!-- 02 Drawer maps -->
+		<!-- 01 Drawers: the two stacks, flat, to scale -->
 		<section class="row comp-sec" id="sec-maps">
-			<div class="row-head"><span class="num">02</span><h2 class="row-label">Drawers</h2>
+			<div class="row-head"><span class="num">01</span><h2 class="row-label">Drawers</h2>
 				<p class="cat-count" id="maps-count"></p></div>
-			<div class="row-body"><div class="comp-maps" id="comp-maps"></div></div>
+			<div class="row-body"><div class="comp-maps" id="comp-maps"></div><div class="comp-legend" id="comp-legend"></div></div>
 		</section>
 
-		<!-- 03… parts, one row per category (rendered) -->
+		<!-- 02… parts, one row per category (rendered) -->
 		<div id="comp-list" class="tools-list comp-list"></div>
 
-		<p class="tools-foot">Internal. Drawer addresses read left to right, top to bottom: A07 is cabinet A, drawer 7. Drawer sizes are worked out from KTK’s outside dimensions and marked <em>(est.)</em> until measured. Values search by meaning: <em>10k</em> finds 10kΩ and 10 kΩ, <em>0.1uF</em> finds 100nF.</p>
+		<p class="tools-foot">Internal. Drawer addresses read left to right, top to bottom: A07 is cabinet A, drawer 7. Left stack A · B · C, right stack D · E · F, top to bottom. Drawer sizes are worked out from KTK’s outside dimensions and marked <em>(est.)</em> until measured. Values search by meaning: <em>10k</em> finds 10kΩ and 10 kΩ, <em>0.1uF</em> finds 100nF.</p>
 	</div>
 </main>
 

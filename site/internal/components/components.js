@@ -2,8 +2,8 @@
  * organisedmess.studio — /internal/components
  * Electronics components and the drawer cabinets they live in.
  *
- *  · Six KTK drawer cabinets (2 × 30D, 2 × 17D, 2 × 9D (L)), drawn in 3D (three.js) and as
- *    front elevations to scale. Drawer address = cabinet letter + drawer number, read left to
+ *  · Six KTK drawer cabinets (2 × 30D, 2 × 9D (L), 2 × 17D) in two stacks, drawn flat as front
+ *    elevations to scale, the way they stand on the bench. Drawer address = cabinet letter + drawer number, read left to
  *    right, top to bottom (A07).
  *  · Parts: name, category, value, package, part number, qty, size class, tags, notes, link,
  *    drawer. Search matches values by meaning (10k = 10kΩ, 0.1uF = 100nF).
@@ -22,20 +22,18 @@ var MODELS = {
 	'17D': { title: '17-drawer', w: 364, d: 152, h: 270, rows: [[6, 40.4], [6, 40.4], [3, 56.4], [1, 56.4], [1, 56.4]] },
 	'9D':  { title: '9-drawer (L)', w: 364, d: 152, h: 206, rows: [[3, 1], [3, 1], [3, 1]] }
 };
+// Two stacks on the bench, lettered top to bottom: left A (30D) on B (9D) on C (17D),
+// right D (30D) on E (9D) on F (17D). col = stack, level 0 = bottom.
 var CAB_DEFAULT = [
-	{ id: 'A', model: '30D', name: '30-drawer', col: 0, level: 1 },
-	{ id: 'B', model: '30D', name: '30-drawer', col: 1, level: 1 },
-	{ id: 'C', model: '17D', name: '17-drawer', col: 0, level: 0 },
-	{ id: 'D', model: '17D', name: '17-drawer', col: 1, level: 0 },
-	{ id: 'E', model: '9D', name: '9-drawer', col: 2, level: 0 },
-	{ id: 'F', model: '9D', name: '9-drawer', col: 2, level: 1 }
+	{ id: 'A', model: '30D', name: 'Left · top', col: 0, level: 2 },
+	{ id: 'B', model: '9D', name: 'Left · middle', col: 0, level: 1 },
+	{ id: 'C', model: '17D', name: 'Left · bottom', col: 0, level: 0 },
+	{ id: 'D', model: '30D', name: 'Right · top', col: 1, level: 2 },
+	{ id: 'E', model: '9D', name: 'Right · middle', col: 1, level: 1 },
+	{ id: 'F', model: '17D', name: 'Right · bottom', col: 1, level: 0 }
 ];
-var PRESETS = {
-	'Three stacks': { A: [0, 1], C: [0, 0], B: [1, 1], D: [1, 0], E: [2, 0], F: [2, 1] },
-	'Two towers': { E: [0, 0], C: [0, 1], A: [0, 2], F: [1, 0], D: [1, 1], B: [1, 2] },
-	'Row of six': { A: [0, 0], B: [1, 0], C: [2, 0], D: [3, 0], E: [4, 0], F: [5, 0] },
-	'Two rows of three': { C: [0, 0], D: [1, 0], E: [2, 0], A: [0, 1], B: [1, 1], F: [2, 1] }
-};
+// v1 lettering (A,B = 30D · C,D = 17D · E,F = 9D) → v2 lettering by position
+var V1_TO_V2 = { A: 'A', E: 'B', C: 'C', B: 'D', F: 'E', D: 'F' };
 
 var CATS = [
 	'Resistors', 'Capacitors', 'Inductors & ferrites', 'Diodes', 'LEDs', 'Transistors & MOSFETs',
@@ -56,7 +54,7 @@ var PREVIEW = !!window.OM_PREVIEW;
 var $ = function (id) { return document.getElementById(id); };
 var $stats = $('comp-stats'), $q = $('comp-q'), $clear = $('comp-clear'), $chips = $('comp-chips'),
 	$result = $('comp-result'), $note = $('comp-note'), $list = $('comp-list'), $maps = $('comp-maps'),
-	$mapsCount = $('maps-count'), $legend = $('comp-legend'), $stage = $('comp-stage'), $stageMsg = $('comp-stage-msg'),
+	$mapsCount = $('maps-count'), $legend = $('comp-legend'), 
 	$modal = $('comp-modal'), $mTitle = $('comp-modal-title'), $mMeta = $('comp-modal-meta'), $mBody = $('comp-modal-body'),
 	$undo = $('comp-undo'), $selbar = $('comp-selbar'), $selcount = $('comp-selcount');
 
@@ -66,7 +64,6 @@ var store = { mode: 'loading', rev: 0, saving: false, dirty: false, timer: 0, er
 var ui = { q: '', cat: null, unplaced: false, drawer: null, sel: null, selecting: false, picked: {} };
 var undoStack = [];
 var geo = { cabs: {}, drawers: {}, order: [] }; // derived layout
-var three = null;               // the 3D view once loaded
 
 boot();
 
@@ -76,13 +73,12 @@ function boot() {
 		buildGeometry();
 		renderAll();
 		bind();
-		init3D();
 	});
 }
 
 /* ---- load / save ------------------------------------------------------------- */
 function emptyDoc() {
-	return { v: 1, created: new Date().toISOString(), cabinets: CAB_DEFAULT.map(clone), drawers: {}, parts: [] };
+	return { v: 2, created: new Date().toISOString(), cabinets: CAB_DEFAULT.map(clone), drawers: {}, parts: [] };
 }
 function normalise(d) {
 	if (!d || typeof d !== 'object') d = emptyDoc();
@@ -90,7 +86,14 @@ function normalise(d) {
 	if (!d.drawers || typeof d.drawers !== 'object') d.drawers = {};
 	if (!Array.isArray(d.parts)) d.parts = [];
 	d.parts.forEach(function (p) { if (!p.id) p.id = uid(); if (!Array.isArray(p.tags)) p.tags = splitTags(p.tags); });
-	d.v = 1;
+	if ((d.v || 1) < 2) {
+		// re-letter v1 addresses to the stack order; cabinet layout is fixed now
+		var mv = function (a) { return a && V1_TO_V2[a[0]] ? V1_TO_V2[a[0]] + a.slice(1) : a; };
+		d.parts.forEach(function (p) { p.loc = mv(p.loc); });
+		var dr = {}; Object.keys(d.drawers).forEach(function (a) { dr[mv(a)] = d.drawers[a]; }); d.drawers = dr;
+		d.cabinets = CAB_DEFAULT.map(clone);
+	}
+	d.v = 2;
 	return d;
 }
 function load() {
@@ -137,7 +140,7 @@ function save() {
 				// changed on another device: take theirs, say so
 				doc = normalise(x.j.doc); store.rev = x.j.rev || 0; undoStack = [];
 				store.error = 'This list was changed on another device. The latest version is loaded; redo your last change.';
-				buildGeometry(); renderAll(); if (three) three.rebuild();
+				buildGeometry(); renderAll();
 				return;
 			}
 			if (!x.r.ok) throw new Error(x.j && x.j.error || ('save failed ' + x.r.status));
@@ -148,19 +151,18 @@ function save() {
 window.addEventListener('beforeunload', function (e) { if (store.dirty || store.saving) { save(); e.preventDefault(); e.returnValue = ''; } });
 
 // every change goes through here: snapshot for undo, apply, re-render, save
-function change(fn, keepView) {
+function change(fn) {
 	undoStack.push(JSON.stringify(doc));
 	if (undoStack.length > 60) undoStack.shift();
 	fn();
 	buildGeometry();
 	renderAll();
-	if (three) three.rebuild(keepView !== false);
 	scheduleSave();
 }
 function undo() {
 	if (!undoStack.length) return;
 	doc = normalise(JSON.parse(undoStack.pop()));
-	buildGeometry(); renderAll(); if (three) three.rebuild(true);
+	buildGeometry(); renderAll();
 	scheduleSave();
 }
 
@@ -278,7 +280,6 @@ function hitDrawers() {
 /* ---- render -------------------------------------------------------------------- */
 function renderAll() {
 	renderStats(); renderChips(); renderMaps(); renderList(); renderLegend(); status();
-	if (three) three.paint();
 	writeUrl();
 }
 function renderStats() {
@@ -288,7 +289,7 @@ function renderStats() {
 	var placed = doc.parts.filter(function (p) { return p.loc; }).length;
 	$stats.dataset.base = doc.cabinets.length + ' cabinets · ' + nd + ' drawers (' + Object.keys(used).length + ' in use, ' + planned + ' planned) · ' +
 		doc.parts.length + ' parts, ' + placed + ' placed';
-	$mapsCount.textContent = nd + ' drawers · tap one to plan it or see what’s in it';
+	$mapsCount.textContent = 'Two stacks · ' + nd + ' drawers · tap one to plan it or see what’s in it';
 }
 function status() {
 	var s = $stats.dataset.base || '';
@@ -340,16 +341,26 @@ function mapHTML(cabId, opts) {
 	});
 	return html + '</div>';
 }
+// the cabinets as they stand: one column per stack, top cabinet first
+function stacks() {
+	var cols = {};
+	doc.cabinets.forEach(function (c) { (cols[c.col] = cols[c.col] || []).push(c); });
+	return Object.keys(cols).map(Number).sort(function (a, b) { return a - b; })
+		.map(function (k) { return cols[k].sort(function (a, b) { return b.level - a.level; }); });
+}
+function stacksHTML(card) {
+	return '<div class="cab-stacks">' + stacks().map(function (col) {
+		return '<div class="cab-stack">' + col.map(card).join('') + '</div>';
+	}).join('') + '</div>';
+}
 function renderMaps() {
 	var hits = hitDrawers();
-	$maps.innerHTML = sortedCabs().map(function (c) {
+	$maps.innerHTML = stacksHTML(function (c) {
 		var g = geo.cabs[c.id], used = g.drawers.filter(function (d) { return drawerParts(d.addr).length; }).length;
-		return '<div class="cab-card"><div class="cab-head"><span class="cab-letter">' + c.id + '</span><span class="cab-name">' + esc(cabTitle(c)) + '</span></div>' +
-			mapHTML(c.id, { hits: hits }) +
-			'<p class="cab-meta">' + g.drawers.length + ' drawers · ' + used + ' in use · ' + g.model.w + ' × ' + g.model.d + ' × ' + g.model.h + ' mm</p></div>';
-	}).join('');
+		return '<div class="cab-card"><div class="cab-head"><span class="cab-letter">' + c.id + '</span><span class="cab-name">' + esc(cabTitle(c)) + '</span>' +
+			'<span class="cab-use">' + used + '/' + g.drawers.length + '</span></div>' + mapHTML(c.id, { hits: hits }) + '</div>';
+	});
 }
-function sortedCabs() { return doc.cabinets.slice().sort(function (a, b) { return a.id < b.id ? -1 : 1; }); }
 
 function renderList() {
 	var parts = filtered();
@@ -365,7 +376,7 @@ function renderList() {
 	if (!parts.length) { $list.innerHTML = '<p class="tools-empty">Nothing matches.</p>'; return; }
 	var by = {};
 	parts.forEach(function (p) { (by[p.cat || 'Misc'] = by[p.cat || 'Misc'] || []).push(p); });
-	var num = 2, m = matcher(ui.q), html = '';
+	var num = 1, m = matcher(ui.q), html = '';
 	allCats().forEach(function (cat) {
 		if (!by[cat]) return;
 		num++;
@@ -431,19 +442,17 @@ function bind() {
 	});
 
 	document.addEventListener('click', function (e) {
-		var t = e.target.closest('[data-act],[data-drw],[data-open],[data-move],[data-sel],[data-view]');
+		var t = e.target.closest('[data-act],[data-drw],[data-open],[data-move],[data-sel]');
 		if (!t || $modal.contains(t)) return;
 		if (t.hasAttribute('data-drw') && t.closest('#comp-maps')) return openDrawer(t.getAttribute('data-drw'));
 		if (t.hasAttribute('data-open')) return openPart(t.getAttribute('data-open'));
 		if (t.hasAttribute('data-move')) return openMove([t.getAttribute('data-move')]);
-		if (t.hasAttribute('data-view')) { if (three) three.view(t.getAttribute('data-view')); return; }
 		if (t.hasAttribute('data-sel')) return selAction(t.getAttribute('data-sel'));
 		var a = t.getAttribute('data-act');
 		if (a === 'add') openPart(null);
 		else if (a === 'import') openImport();
 		else if (a === 'export') openExport();
 		else if (a === 'suggest') openSuggest();
-		else if (a === 'arrange') openArrange();
 		else if (a === 'sample') loadSample();
 		else if (a === 'select') setSelecting(!ui.selecting);
 	});
@@ -499,13 +508,13 @@ function openModal(title, meta, html, onBind) {
 }
 function closeModal() {
 	$modal.hidden = true; $mBody.innerHTML = ''; document.documentElement.style.overflow = '';
-	if (ui.sel) { ui.sel = null; renderMaps(); if (three) three.paint(); }
+	if (ui.sel) { ui.sel = null; renderMaps(); }
 }
 
 /* drawer: what's in it, its plan, add parts to it */
 function openDrawer(addr) {
 	var d = geo.drawers[addr]; if (!d) return;
-	ui.sel = addr; renderMaps(); if (three) { three.paint(); three.focus(addr); }
+	ui.sel = addr; renderMaps();
 	var g = geo.cabs[d.cab], plan = doc.drawers[addr] || {}, parts = drawerParts(addr);
 	var unplaced = doc.parts.filter(function (p) { return !p.loc; });
 	var html = '<div class="comp-two"><div>' +
@@ -634,9 +643,9 @@ function pickDrawer(current, done, what) {
 	var saved = nested ? Array.prototype.slice.call($mBody.childNodes) : null;
 	var html = '<p class="hint" style="margin:0 0 1rem">Tap a drawer' + (what ? ' for <strong>' + esc(what) + '</strong>' : '') + '. Planned drawers show their category colour; numbers are part counts.</p>' +
 		'<input class="comp-in" id="pk-find" placeholder="Find a drawer by label or category…" style="margin-bottom:1rem">' +
-		'<div class="comp-pick">' + sortedCabs().map(function (c) {
+		'<div class="comp-pick">' + stacksHTML(function (c) {
 			return '<div class="cab-card"><div class="cab-head"><span class="cab-letter">' + c.id + '</span><span class="cab-name">' + esc(cabTitle(c)) + '</span></div>' + mapHTML(c.id, { target: true, current: current }) + '</div>';
-		}).join('') + '</div><div class="comp-btns"><button type="button" class="tools-chip" id="pk-none">Unplaced</button><span class="grow"></span>' +
+		}) + '</div><div class="comp-btns"><button type="button" class="tools-chip" id="pk-none">Unplaced</button><span class="grow"></span>' +
 		(nested ? '<button type="button" class="comp-link" id="pk-back">Back</button>' : '') + '</div>';
 	var finish = function (a) {
 		if (nested) { $mTitle.innerHTML = prev.title; $mMeta.textContent = prev.meta; $mBody.innerHTML = ''; saved.forEach(function (n) { $mBody.appendChild(n); }); done(a); }
@@ -665,46 +674,6 @@ function openCatPick(ids) {
 	var html = '<div class="tools-chips">' + allCats().map(function (c) { return '<button type="button" class="tools-chip" data-c="' + esc(c) + '"><span class="sw" style="--c:' + catColor(c) + '"></span>' + esc(c) + '</button>'; }).join('') + '</div>';
 	openModal('Set category', ids.length + ' parts', html, function (b) {
 		b.querySelectorAll('[data-c]').forEach(function (x) { x.onclick = function () { var c = x.getAttribute('data-c'); change(function () { doc.parts.forEach(function (p) { if (ids.indexOf(p.id) >= 0) p.cat = c; }); }); closeModal(); ui.picked = {}; renderList(); selCount(); }; });
-	});
-}
-
-/* arrangement of the six cabinets */
-function openArrange() {
-	var html = '<h4>Presets</h4><div class="tools-chips">' + Object.keys(PRESETS).map(function (k) { return '<button type="button" class="tools-chip" data-pre="' + esc(k) + '">' + esc(k) + '</button>'; }).join('') + '</div>' +
-		'<h4>Cabinets</h4><ul class="comp-arr">' + sortedCabs().map(function (c) {
-			return '<li><span class="cab-letter">' + c.id + '</span><input class="comp-in" data-name="' + c.id + '" value="' + esc(c.name || '') + '" aria-label="Name of cabinet ' + c.id + '">' +
-				'<span class="ctl"><span class="q" style="font-size:var(--t-xs);color:var(--muted)">' + MODELS[c.model].title + ' · stack ' + (c.col + 1) + ', ' + (c.level + 1) + '</span>' +
-				'<button type="button" class="comp-mini" data-mv="' + c.id + ':-1:0" aria-label="Left">←</button><button type="button" class="comp-mini" data-mv="' + c.id + ':1:0" aria-label="Right">→</button>' +
-				'<button type="button" class="comp-mini" data-mv="' + c.id + ':0:1" aria-label="Up">↑</button><button type="button" class="comp-mini" data-mv="' + c.id + ':0:-1" aria-label="Down">↓</button></span></li>';
-		}).join('') + '</ul><p class="hint">← → moves a cabinet to the next stack; ↑ ↓ swaps it within its stack. All six share the same 364 × 152 mm footprint, so any of them stack.</p>' +
-		'<div class="comp-btns"><button type="button" class="tools-send" data-close>Done</button></div>';
-	openModal('Arrange cabinets', '', html, function (b) {
-		b.querySelectorAll('[data-pre]').forEach(function (x) { x.onclick = function () {
-			var p = PRESETS[x.getAttribute('data-pre')];
-			change(function () { doc.cabinets.forEach(function (c) { if (p[c.id]) { c.col = p[c.id][0]; c.level = p[c.id][1]; } }); }, false);
-			openArrange();
-		}; });
-		b.querySelectorAll('[data-name]').forEach(function (x) { x.onchange = function () { var id = x.getAttribute('data-name'); change(function () { cabById(id).name = x.value.trim(); }); }; });
-		b.querySelectorAll('[data-mv]').forEach(function (x) { x.onclick = function () {
-			var a = x.getAttribute('data-mv').split(':'), c = cabById(a[0]), dx = +a[1], dy = +a[2];
-			change(function () {
-				if (dx) { c.col = Math.max(0, c.col + dx); c.level = 99; }
-				if (dy) {
-					var stack = doc.cabinets.filter(function (o) { return o.col === c.col; }).sort(function (p, q) { return p.level - q.level; });
-					var i = stack.indexOf(c), j = i + dy;
-					if (j >= 0 && j < stack.length) { var t = stack[j].level; stack[j].level = c.level; c.level = t; }
-				}
-				compactStacks();
-			}, false);
-			openArrange();
-		}; });
-	});
-}
-function compactStacks() {
-	var cols = {};
-	doc.cabinets.forEach(function (c) { (cols[c.col] = cols[c.col] || []).push(c); });
-	Object.keys(cols).map(Number).sort(function (a, b) { return a - b; }).forEach(function (col, i) {
-		cols[col].sort(function (a, b) { return a.level - b.level; }).forEach(function (c, l) { c.col = i; c.level = l; });
 	});
 }
 
@@ -856,7 +825,7 @@ function openImport() {
 			change(function () {
 				if (parsed.doc) doc = normalise(JSON.parse(JSON.stringify(parsed.doc)));
 				else doc.parts = parsed.parts;
-			}, false);
+			});
 			closeModal();
 		};
 	});
@@ -900,14 +869,14 @@ function loadSample() {
 		['Electrolytic 25V', 'Capacitors', '100uF', '6.3 × 7 mm radial', '', 30, 'pcs', 'S', 'tht', ''],
 		['Schottky diode', 'Diodes', '', 'SOD-123', '1N5819W', 100, 'pcs', 'S', 'smd', ''],
 		['Rectifier diode', 'Diodes', '', 'DO-41', '1N4007', 50, 'pcs', 'S', 'tht', ''],
-		['Addressable RGB LED', 'LEDs', '', '5050', 'WS2812B', 200, 'pcs', 'S', 'neopixel, 5V', 'B01'],
+		['Addressable RGB LED', 'LEDs', '', '5050', 'WS2812B', 200, 'pcs', 'S', 'neopixel, 5V', 'D01'],
 		['LED strip 60/m', 'LEDs', '', '10 mm strip', 'SK6812', 5, 'm', 'L', 'addressable', ''],
 		['N-MOSFET logic level', 'Transistors & MOSFETs', '30V', 'SOT-23', 'AO3400A', 100, 'pcs', 'S', 'smd, switching', ''],
 		['NPN transistor', 'Transistors & MOSFETs', '', 'TO-92', '2N2222A', 30, 'pcs', 'S', 'tht', ''],
 		['LDO regulator', 'Voltage regulators', '3.3V', 'SOT-223', 'AMS1117-3.3', 40, 'pcs', 'S', '1A', ''],
 		['Buck converter', 'Voltage regulators', '3.3V', 'TSOT-23-6', 'AP63203WU', 20, 'pcs', 'S', '2A, 3.8–32V in', ''],
-		['ESP32-S3 dev board', 'Microcontrollers & boards', '', 'DevKitC-1', 'ESP32-S3-DevKitC-1-N8R8', 3, 'board', 'M', 'wifi, ble, usb', 'E01'],
-		['Raspberry Pi Pico 2', 'Microcontrollers & boards', '', 'module', 'RP2350', 4, 'board', 'M', 'rp2350', 'E01'],
+		['ESP32-S3 dev board', 'Microcontrollers & boards', '', 'DevKitC-1', 'ESP32-S3-DevKitC-1-N8R8', 3, 'board', 'M', 'wifi, ble, usb', 'B01'],
+		['Raspberry Pi Pico 2', 'Microcontrollers & boards', '', 'module', 'RP2350', 4, 'board', 'M', 'rp2350', 'B01'],
 		['Arduino Nano ESP32', 'Microcontrollers & boards', '', 'Nano', 'ABX00083', 2, 'board', 'M', 'esp32-s3', ''],
 		['BME280 breakout', 'Sensors & modules', '', 'module', 'BME280', 3, 'pcs', 'M', 'i2c, temperature, humidity, pressure', ''],
 		['JST XH connector kit', 'Connectors', '', '2.50 mm', 'XH', 1, 'kit', 'M', 'jst xh, 2-6 pin, crimp', 'C13'],
@@ -929,244 +898,13 @@ function loadSample() {
 		});
 		doc.drawers.A01 = doc.drawers.A01 || { cat: 'Resistors', label: '0805 resistors' };
 		doc.drawers.A07 = doc.drawers.A07 || { cat: 'Capacitors', label: '0805 MLCC' };
-		doc.drawers.E01 = doc.drawers.E01 || { cat: 'Microcontrollers & boards', label: 'Dev boards' };
+		doc.drawers.B01 = doc.drawers.B01 || { cat: 'Microcontrollers & boards', label: 'Dev boards' };
 	});
-}
-
-/* ---- 3D --------------------------------------------------------------------- */
-function init3D() {
-	Promise.all([import('three'), import('three/addons/controls/OrbitControls.js')]).then(function (mods) {
-		three = makeThree(mods[0], mods[1].OrbitControls);
-		$stageMsg.remove();
-	}).catch(function (e) {
-		$stageMsg.textContent = 'The 3D view didn’t load (' + e.message + '). The drawer maps below work the same.';
-	});
-}
-function makeThree(THREE, OrbitControls) {
-	var renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-	renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-	renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;
-	renderer.outputColorSpace = THREE.SRGBColorSpace;
-	$stage.appendChild(renderer.domElement);
-	var scene = new THREE.Scene();
-	var camera = new THREE.PerspectiveCamera(30, 1, 10, 20000);
-	var controls = new OrbitControls(camera, renderer.domElement);
-	controls.enableDamping = true; controls.dampingFactor = 0.08; controls.maxPolarAngle = Math.PI * 0.495; controls.minDistance = 200; controls.maxDistance = 6000;
-	controls.screenSpacePanning = true;
-
-	scene.add(new THREE.HemisphereLight(0xffffff, 0xcfcfcf, 1.6));
-	var sun = new THREE.DirectionalLight(0xffffff, 1.6);
-	sun.position.set(-600, 1400, 1200); sun.castShadow = true;
-	sun.shadow.mapSize.set(2048, 2048); sun.shadow.radius = 6;
-	var sc = sun.shadow.camera; sc.left = -1500; sc.right = 1500; sc.top = 1500; sc.bottom = -1500; sc.near = 100; sc.far = 5000;
-	scene.add(sun); scene.add(sun.target);
-	var fill = new THREE.DirectionalLight(0xffffff, 0.5); fill.position.set(800, 300, 900); scene.add(fill);
-	var ground = new THREE.Mesh(new THREE.PlaneGeometry(8000, 8000), new THREE.ShadowMaterial({ opacity: 0.16 }));
-	ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
-
-	var shellMat = new THREE.MeshStandardMaterial({ color: 0x1c1c1a, roughness: 0.55, metalness: 0.05 });
-	var pullMat = new THREE.MeshStandardMaterial({ color: 0xf4f6f7, roughness: 0.3, transparent: true, opacity: 0.85 });
-	var root = new THREE.Group(); scene.add(root);
-	var drawers = {}; // addr → { group, tray, front, fill, tex, canvas, open, target }
-	var anim = { t: 0 };
-
-	function box(w, h, d, mat) { var m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.castShadow = true; m.receiveShadow = true; return m; }
-
-	function rebuild(keepView) {
-		// clear
-		root.traverse(function (o) { if (o.geometry) o.geometry.dispose(); if (o.material && o.material !== shellMat && o.material !== pullMat) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } });
-		root.clear(); drawers = {};
-		// stacks → positions (x across, y up, z towards the viewer; cabinet front at z = d/2)
-		var cols = {};
-		doc.cabinets.forEach(function (c) { (cols[c.col] = cols[c.col] || []).push(c); });
-		var colKeys = Object.keys(cols).map(Number).sort(function (a, b) { return a - b; });
-		var GAPX = 14, totalW = colKeys.length * 364 + (colKeys.length - 1) * GAPX;
-		colKeys.forEach(function (k, ci) {
-			var y = 0, x0 = -totalW / 2 + ci * (364 + GAPX);
-			cols[k].sort(function (a, b) { return a.level - b.level; }).forEach(function (c) {
-				var g = geo.cabs[c.id], m = g.model, grp = new THREE.Group();
-				grp.position.set(x0, y, -m.d / 2);
-				buildCabinet(grp, c, g);
-				root.add(grp);
-				y += m.h + 1;
-			});
-		});
-		paint();
-		if (!keepView) view(curView, true);
-		kick();
-	}
-
-	function buildCabinet(grp, c, g) {
-		var m = g.model, W = m.w, H = m.h, D = m.d;
-		// shell: sides, top, bottom, back (cabinet-local: x 0..W, y 0..H, z 0..D, front at z = D)
-		var add = function (mesh, x, y, z) { mesh.position.set(x, y, z); grp.add(mesh); };
-		add(box(WALL, H, D, shellMat), WALL / 2, H / 2, D / 2);
-		add(box(WALL, H, D, shellMat), W - WALL / 2, H / 2, D / 2);
-		add(box(W, WALL, D, shellMat), W / 2, H - WALL / 2, D / 2);
-		add(box(W, WALL, D, shellMat), W / 2, WALL / 2, D / 2);
-		add(box(W, H, 3, shellMat), W / 2, H / 2, 1.5);
-		// shelves between rows and dividers between drawers
-		var rows = {};
-		g.drawers.forEach(function (d) { (rows[d.row] = rows[d.row] || []).push(d); });
-		Object.keys(rows).forEach(function (r) {
-			var list = rows[r], d0 = list[0];
-			if (+r > 1) add(box(W - 2 * WALL, GAP, D - 4, shellMat), W / 2, H - (d0.y - GAP / 2), D / 2 - 1);
-			list.slice(1).forEach(function (d) { add(box(GAP, d.h, D - 4, shellMat), d.x - GAP / 2, H - d.y - d.h / 2, D / 2 - 1); });
-		});
-		// label on the cabinet top
-		var lc = document.createElement('canvas'); lc.width = 256; lc.height = 256;
-		var lx = lc.getContext('2d'); lx.fillStyle = '#efefef'; lx.font = '300 200px Gaisyr, Georgia, serif'; lx.textAlign = 'center'; lx.textBaseline = 'middle'; lx.fillText(c.id, 128, 140);
-		var lt = new THREE.CanvasTexture(lc); lt.colorSpace = THREE.SRGBColorSpace;
-		var lbl = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), new THREE.MeshBasicMaterial({ map: lt, transparent: true }));
-		lbl.rotation.x = -Math.PI / 2; lbl.position.set(W / 2, H + 0.6, D - 40); grp.add(lbl);
-		// drawers
-		g.drawers.forEach(function (d) {
-			var dg = new THREE.Group(), w = d.w - 1, h = d.h - 1, dd = D - 10;
-			var base = D - dd - 1.5;
-			dg.position.set(d.x + d.w / 2, H - d.y - d.h / 2, base);
-			var trayMat = new THREE.MeshPhysicalMaterial({ color: 0xeef2f4, roughness: 0.15, transparent: true, opacity: 0.32, depthWrite: false, side: THREE.DoubleSide });
-			var tray = new THREE.Mesh(new THREE.BoxGeometry(w - 2, h - 2, dd - 2), trayMat);
-			tray.position.set(0, 0, dd / 2); tray.renderOrder = 2; dg.add(tray);
-			var fillMat = new THREE.MeshStandardMaterial({ color: 0x999999, roughness: 0.7, transparent: true, opacity: 0.9 });
-			var fillH = Math.max(6, h * 0.42);
-			var fil = new THREE.Mesh(new THREE.BoxGeometry(w - 7, fillH, dd - 14), fillMat);
-			fil.position.set(0, -h / 2 + fillH / 2 + 2, dd / 2); fil.castShadow = false; dg.add(fil);
-			// front with a printed label
-			var cv = document.createElement('canvas'), ar = h / w;
-			cv.width = 256; cv.height = Math.max(64, Math.round(256 * ar));
-			var tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
-			var frontMat = new THREE.MeshStandardMaterial({ map: tex, transparent: true, roughness: 0.25 });
-			var front = new THREE.Mesh(new THREE.PlaneGeometry(w, h), frontMat);
-			front.position.set(0, 0, dd + 0.5); front.renderOrder = 3; dg.add(front);
-			var pull = box(Math.min(w * 0.4, 30), 3, 7, pullMat); pull.position.set(0, -h / 2 + 5, dd + 3.5); dg.add(pull);
-			front.userData.addr = tray.userData.addr = fil.userData.addr = pull.userData.addr = d.addr;
-			grp.add(dg);
-			drawers[d.addr] = { group: dg, tray: tray, fill: fil, front: front, tex: tex, canvas: cv, open: 0, target: 0, d: d, base: base };
-		});
-	}
-
-	function paintFront(o, cat, label, n, hit, dim, sel) {
-		var cv = o.canvas, x = cv.getContext('2d'), W = cv.width, H = cv.height;
-		x.clearRect(0, 0, W, H);
-		x.fillStyle = hit ? 'rgba(255,228,138,0.92)' : 'rgba(246,248,249,' + (dim ? 0.35 : 0.62) + ')';
-		x.fillRect(0, 0, W, H);
-		if (cat) { x.fillStyle = catColor(cat); x.globalAlpha = n ? 0.95 : 0.4; x.fillRect(0, H - Math.max(8, H * 0.16), W, Math.max(8, H * 0.16)); x.globalAlpha = 1; }
-		if (sel) { x.strokeStyle = '#15150c'; x.lineWidth = 8; x.strokeRect(4, 4, W - 8, H - 8); }
-		x.fillStyle = dim ? 'rgba(21,21,12,0.35)' : '#15150c';
-		var fs = Math.min(H * 0.34, 64);
-		x.font = '300 ' + fs + 'px Diatype, "Helvetica Neue", Arial, sans-serif';
-		x.textBaseline = 'top'; x.fillText(o.d.addr, 12, 10);
-		if (n) { x.textAlign = 'right'; x.fillStyle = 'rgba(21,21,12,0.55)'; x.fillText(String(n), W - 12, 10); x.textAlign = 'left'; }
-		if (label && H > 90) {
-			x.fillStyle = dim ? 'rgba(21,21,12,0.3)' : 'rgba(21,21,12,0.75)';
-			x.font = '300 ' + Math.min(H * 0.2, 34) + 'px Diatype, "Helvetica Neue", Arial, sans-serif';
-			var t = label; while (x.measureText(t).width > W - 24 && t.length > 2) t = t.slice(0, -2) + '…';
-			x.fillText(t, 12, 12 + fs + 4);
-		}
-		o.tex.needsUpdate = true;
-	}
-	function paint() {
-		var hits = hitDrawers();
-		Object.keys(drawers).forEach(function (a) {
-			var o = drawers[a], plan = doc.drawers[a] || {}, n = drawerParts(a).length, cat = drawerCat(a);
-			var hit = hits && hits[a], dim = hits && !hit, sel = ui.sel === a;
-			paintFront(o, cat, plan.label || (cat && o.d.size !== 'S' ? cat : ''), n, hit, dim, sel);
-			o.fill.visible = !!n;
-			if (n) { o.fill.material.color.set(catColor(cat) || '#9a9a9a'); o.fill.material.opacity = dim ? 0.25 : 0.9; }
-			o.tray.material.opacity = dim ? 0.12 : 0.32;
-			o.front.material.opacity = dim ? 0.75 : 1;
-			o.target = sel ? 105 : (hit && hitCount(hits) <= 6 ? 45 : 0);
-		});
-		kick();
-	}
-	function hitCount(h) { var n = 0; for (var k in h) n++; return n; }
-
-	// views
-	var curView = 'three';
-	function bounds() { var b = new THREE.Box3().setFromObject(root); return b.isEmpty() ? new THREE.Box3(new THREE.Vector3(-500, 0, -100), new THREE.Vector3(500, 500, 100)) : b; }
-	function view(name, instant) {
-		curView = name || curView;
-		document.querySelectorAll('[data-view]').forEach(function (b) { b.setAttribute('aria-pressed', b.getAttribute('data-view') === curView ? 'true' : 'false'); });
-		var b = bounds(), c = b.getCenter(new THREE.Vector3()), s = b.getSize(new THREE.Vector3());
-		var aspect = camera.aspect || 1.5, fov = camera.fov * Math.PI / 180;
-		var fitH = s.y / (2 * Math.tan(fov / 2)), fitW = s.x / (2 * Math.tan(fov / 2) * aspect);
-		var dist = Math.max(fitH, fitW) * 1.25 + s.z;
-		var dir = curView === 'front' ? new THREE.Vector3(0, 0.04, 1) : curView === 'top' ? new THREE.Vector3(0, 1, 0.55) : new THREE.Vector3(-0.55, 0.32, 1);
-		if (curView === 'top') dist = Math.max(s.x / (2 * Math.tan(fov / 2) * aspect), s.z * 3) * 1.25 + s.y;
-		dir.normalize();
-		tween(c, c.clone().add(dir.multiplyScalar(dist)), instant);
-	}
-	var tw = null;
-	function tween(target, pos, instant) {
-		if (instant) { controls.target.copy(target); camera.position.copy(pos); controls.update(); kick(); return; }
-		tw = { t0: performance.now(), ft: controls.target.clone(), fp: camera.position.clone(), tt: target, tp: pos };
-		kick();
-	}
-	function focus(addr) {
-		var o = drawers[addr]; if (!o) return;
-		var p = new THREE.Vector3(); o.front.getWorldPosition(p);
-		var dir = camera.position.clone().sub(controls.target).normalize();
-		if (dir.z < 0.3) dir.set(-0.35, 0.3, 1).normalize();
-		tween(p.clone().add(new THREE.Vector3(0, 0, 40)), p.clone().add(dir.multiplyScalar(900)));
-	}
-
-	// picking
-	var ray = new THREE.Raycaster(), ptr = new THREE.Vector2(), down = null;
-	renderer.domElement.addEventListener('pointerdown', function (e) { down = { x: e.clientX, y: e.clientY }; });
-	renderer.domElement.addEventListener('pointerup', function (e) {
-		if (!down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 6) { down = null; return; }
-		down = null;
-		var a = pick(e);
-		if (a) openDrawer(a);
-	});
-	renderer.domElement.addEventListener('pointermove', function (e) { if (e.buttons) return; renderer.domElement.style.cursor = pick(e) ? 'pointer' : 'grab'; });
-	function pick(e) {
-		var r = renderer.domElement.getBoundingClientRect();
-		ptr.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
-		ray.setFromCamera(ptr, camera);
-		var hit = ray.intersectObjects(root.children, true).find(function (h) { return h.object.userData.addr; });
-		return hit ? hit.object.userData.addr : null;
-	}
-
-	// loop: runs while something moves, then sleeps
-	var running = false, idle = 0;
-	function kick() { idle = 0; if (!running) { running = true; requestAnimationFrame(loop); } }
-	controls.addEventListener('change', kick);
-	function loop(t) {
-		var moving = false;
-		if (tw) {
-			var k = Math.min(1, (t - tw.t0) / 700), e = 1 - Math.pow(1 - k, 3);
-			controls.target.lerpVectors(tw.ft, tw.tt, e); camera.position.lerpVectors(tw.fp, tw.tp, e);
-			if (k >= 1) tw = null; moving = true;
-		}
-		Object.keys(drawers).forEach(function (a) {
-			var o = drawers[a];
-			if (Math.abs(o.open - o.target) > 0.3) { o.open += (o.target - o.open) * 0.16; o.group.position.z = o.base + o.open; moving = true; }
-		});
-		var ch = controls.update();
-		renderer.render(scene, camera);
-		idle = moving || ch ? 0 : idle + 1;
-		if (idle < 30) requestAnimationFrame(loop); else running = false;
-	}
-	function resize() {
-		var w = $stage.clientWidth, h = $stage.clientHeight; if (!w || !h) return;
-		renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); kick();
-	}
-	new ResizeObserver(resize).observe($stage);
-	resize();
-	rebuild(false);
-	view('three', true);
-	if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { paint(); });
-
-	return {
-		rebuild: function (keep) { rebuild(keep !== false); },
-		paint: paint, view: function (v) { view(v); }, focus: focus
-	};
 }
 
 /* ---- helpers ---------------------------------------------------------------- */
 function byId(id) { for (var i = 0; i < doc.parts.length; i++) if (doc.parts[i].id === id) return doc.parts[i]; return null; }
-function cabTitle(c) { var t = MODELS[c.model].title; return c.name && c.name !== t && c.name !== t.replace(' (L)', '') ? c.name + ' · ' + t : t; }
+function cabTitle(c) { var t = MODELS[c.model].title; return c.name ? c.name + ' · ' + t : t; }
 function cabById(id) { return doc.cabinets.find(function (c) { return c.id === id; }); }
 function catOptions(sel) { return allCats().map(function (c) { return '<option' + (c === sel ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join(''); }
 function splitTags(t) { return Array.isArray(t) ? t : String(t || '').split(/[,;]+/).map(function (s) { return s.trim(); }).filter(Boolean); }
