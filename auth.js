@@ -202,10 +202,13 @@ export async function internal(request, env, url, deps) {
 	if (s.user.mustChange) return p.includes('/api/') ? json({ error: 'choose your own password first' }, 403) : bounce(INTERNAL + '/account');
 	if (p === INTERNAL + '/login') return bounce(HOME);
 
-	const tools = p === INTERNAL || p === HOME || p === INTERNAL + '/index.html' || p === INTERNAL + '/tools' || p.startsWith(INTERNAL + '/tools/');
+	// workshop pages: open to tools-only logins too
+	const tools = p === INTERNAL || p === HOME || p === INTERNAL + '/index.html' || p === INTERNAL + '/tools' || p.startsWith(INTERNAL + '/tools/') ||
+		p === INTERNAL + '/components' || p.startsWith(INTERNAL + '/components/');
 	if (s.user.access !== 'all' && !tools) return p.includes('/api/') ? json({ error: 'not allowed for this login' }, 403) : deps.page('Not available', '<p class="tools-login-intro">Your login opens the workshop tools only.</p>', back(), 403);
 
 	if (p === INTERNAL + '/tools/api/state') return deps.toolsState(request, env);
+	if (p === INTERNAL + '/components/api/state') return deps.componentsState(request, env);
 	if (p === INTERNAL + '/admin' || p.startsWith(INTERNAL + '/admin/')) return deps.adminPass(request, env);
 	const res = await env.ASSETS.fetch(request);
 	const out = new Response(res.body, res);

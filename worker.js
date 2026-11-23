@@ -17,6 +17,9 @@
 //    see wrangler.jsonc). That Worker has no public address; its code and data live in a separate private repo.
 //  · /internal/tools/api/state keeps each tool's location + condition in KV (binding TOOLS_KV,
 //    see wrangler.jsonc). Without the binding the page falls back to the browser's localStorage.
+//  · /internal/components/api/state keeps the whole components list (parts, drawer plans, cabinet
+//    layout) as one document in the same KV, with a revision number so two devices can't overwrite
+//    each other silently, and the previous version kept under a second key.
 //
 // Contact form:
 //  · delivery: SMTP straight to Google Workspace from the Worker (cloudflare:sockets), logged in as
@@ -311,7 +314,7 @@ ${body}
 
 /* ---- /internal: the login gate, people and sessions live in auth.js ---- */
 function internal(request, env, url) {
-	return internalGate(request, env, url, { adminPass, toolsState, json, page: internalPage });
+	return internalGate(request, env, url, { adminPass, toolsState, componentsState, json, page: internalPage });
 }
 
 /* ---- /internal/admin/*: the private admin Worker, behind this login ---------- */
@@ -358,6 +361,39 @@ async function toolsState(request, env) {
 		items[id] = cur;
 		await env.TOOLS_KV.put(STATE_KEY, JSON.stringify(items));
 		return json({ ok: true, item: cur }, 200);
+	}
+	return json({ error: 'GET or PUT' }, 405);
+}
+
+/* ---- /internal/components/api/state: the components list as one document ------ */
+// GET → { rev, doc, updated }   (rev 0 and doc null before the first save)
+// PUT { rev, doc } → saved as rev + 1 when rev matches what's stored; otherwise 409 with the stored
+// { rev, doc } so the page can load it. The version it replaces is kept under COMP_PREV (one step back).
+const COMP_KEY = 'components-state-v1';
+const COMP_PREV = 'components-state-v1-prev';
+const COMP_MAX = 4 * 1024 * 1024;
+
+async function componentsState(request, env) {
+	if (!env.TOOLS_KV) return json({ error: 'TOOLS_KV binding not configured' }, 503);
+	if (request.method === 'GET') {
+		const cur = (await env.TOOLS_KV.get(COMP_KEY, 'json')) || { rev: 0, doc: null };
+		return json(cur, 200);
+	}
+	if (request.method === 'PUT') {
+		const text = await request.text();
+		if (text.length > COMP_MAX) return json({ error: 'too large' }, 413);
+		let body;
+		try { body = JSON.parse(text); } catch (e) { return json({ error: 'bad json' }, 400); }
+		const doc = body && body.doc;
+		if (!doc || typeof doc !== 'object' || !Array.isArray(doc.parts) || !Array.isArray(doc.cabinets) || typeof doc.drawers !== 'object') {
+			return json({ error: 'bad document' }, 400);
+		}
+		const cur = (await env.TOOLS_KV.get(COMP_KEY, 'json')) || { rev: 0, doc: null };
+		if ((cur.rev || 0) !== (body.rev || 0)) return json({ error: 'conflict', rev: cur.rev, doc: cur.doc }, 409);
+		if (cur.doc) await env.TOOLS_KV.put(COMP_PREV, JSON.stringify(cur));
+		const next = { rev: (cur.rev || 0) + 1, updated: new Date().toISOString(), doc };
+		await env.TOOLS_KV.put(COMP_KEY, JSON.stringify(next));
+		return json({ ok: true, rev: next.rev, updated: next.updated }, 200);
 	}
 	return json({ error: 'GET or PUT' }, 405);
 }

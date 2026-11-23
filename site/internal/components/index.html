@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Components — Organised Mess</title>
+	<meta name="robots" content="noindex, nofollow">
+	<meta name="theme-color" content="#f2f2f2">
+	<link rel="icon" href="/assets/favicon.ico" sizes="16x16 32x32">
+	<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+	<link rel="preload" href="/fonts/ABCGaisyrEdu-Light.woff2" as="font" type="font/woff2" crossorigin>
+	<link rel="preload" href="/fonts/ABCDiatypeEdu-Thin.woff2" as="font" type="font/woff2" crossorigin>
+	<link rel="stylesheet" href="/css/site.css">
+	<link rel="stylesheet" href="/css/internal.css">
+	<link rel="stylesheet" href="/internal/components/components.css">
+	<script>
+	// base unit + mobile class: the same viewport-relative rem js/site.js computes for the home page
+	(function () {
+		var html = document.documentElement;
+		html.classList.add('js');
+		var portrait = window.matchMedia('(max-aspect-ratio: 4/5)');
+		var landscape = window.matchMedia('(min-aspect-ratio: 2/3) and (max-height: 500px)');
+		function apply() {
+			var w = html.clientWidth, h = window.innerHeight;
+			var mobile = portrait.matches || landscape.matches;
+			var l = h > w ? Math.min(1, (h / w - 1) / 0.777777778) : 0;
+			var f = (mobile && !portrait.matches) ? 18 : 9;
+			var side = Math.min(w, h), unit = Math.max(20, side / (100 / (f + 5 * l)));
+			html.style.setProperty('--base-size', (unit * 0.16) + 'px');
+			html.style.setProperty('--viewport-height', h + 'px');
+			html.classList.toggle('mobile', mobile);
+			if (document.body) document.body.classList.toggle('mobile', mobile);
+		}
+		apply();
+		window.addEventListener('resize', apply, { passive: true });
+		document.addEventListener('DOMContentLoaded', function () {
+			apply();
+			requestAnimationFrame(function () { document.body.classList.add('strips-in'); });
+		});
+	})();
+	</script>
+</head>
+<body class="tools internal comp">
+<a class="skip-link" href="#comp-main">Skip to content</a>
+
+<header class="bar bar-top bar-tools" id="header">
+	<a class="pill" href="/internal/"><span class="arr arr-back">←</span>&nbsp;Internal</a>
+	<span class="comp-bar-right">
+		<button type="button" class="pill comp-undo" id="comp-undo" hidden>Undo</button>
+		<a class="pill pill-logout" href="/internal/logout">Log out</a>
+	</span>
+</header>
+
+<main id="comp-main" class="page page-tools" tabindex="-1">
+	<div class="page-content">
+
+		<div class="tools-head">
+			<h1 class="tools-title">Components</h1>
+			<p class="tools-meta" id="comp-stats">Loading…</p>
+		</div>
+
+		<div class="tools-search">
+			<div class="tools-field">
+				<label class="sr-only" for="comp-q">Search components and drawers</label>
+				<input id="comp-q" type="search" autocomplete="off" spellcheck="false" placeholder="10k, 100nF, 0805, JST XH, ESP32, A07…">
+				<button type="button" id="comp-clear" class="tools-clear" hidden aria-label="Clear search">×</button>
+			</div>
+			<div class="tools-chips" id="comp-chips" role="group" aria-label="Filter by category"></div>
+			<p class="tools-result" id="comp-result" role="status" aria-live="polite"></p>
+			<p class="tools-note" id="comp-note" hidden></p>
+		</div>
+
+		<div class="comp-actions" role="toolbar" aria-label="Components">
+			<button type="button" class="tools-chip" data-act="add">+ Add a part</button>
+			<button type="button" class="tools-chip" data-act="import">Import list</button>
+			<button type="button" class="tools-chip" data-act="export">Export</button>
+			<button type="button" class="tools-chip" data-act="suggest">Suggest places</button>
+			<button type="button" class="tools-chip" data-act="select" aria-pressed="false">Select</button>
+		</div>
+
+		<!-- 01 Drawers: the two stacks, flat, to scale -->
+		<section class="row comp-sec" id="sec-maps">
+			<div class="row-head"><span class="num">01</span><h2 class="row-label">Drawers</h2>
+				<p class="cat-count" id="maps-count"></p></div>
+			<div class="row-body"><div class="comp-maps" id="comp-maps"></div><div class="comp-legend" id="comp-legend"></div></div>
+		</section>
+
+		<!-- 02… parts, one row per category (rendered) -->
+		<div id="comp-list" class="tools-list comp-list"></div>
+
+		<p class="tools-foot">Internal. Drawer addresses read left to right, top to bottom: A07 is cabinet A, drawer 7. Left stack A · B · C, right stack D · E · F, top to bottom. Drawer sizes are worked out from KTK’s outside dimensions and marked <em>(est.)</em> until measured. Values search by meaning: <em>10k</em> finds 10kΩ and 10 kΩ, <em>0.1uF</em> finds 100nF.</p>
+	</div>
+</main>
+
+<!-- selection bar -->
+<div class="bar comp-selbar" id="comp-selbar" hidden>
+	<span class="pill"><span id="comp-selcount">0 selected</span></span>
+	<span class="comp-selbtns">
+		<button type="button" class="pill" data-sel="move">Move to…</button>
+		<button type="button" class="pill" data-sel="cat">Category…</button>
+		<button type="button" class="pill" data-sel="unplace">Unplace</button>
+		<button type="button" class="pill" data-sel="done">Done</button>
+	</span>
+</div>
+
+<!-- one modal window, filled per use -->
+<div class="tool-detail comp-modal" id="comp-modal" hidden>
+	<div class="os-win tool-detail-win" role="dialog" aria-modal="true" aria-labelledby="comp-modal-title">
+		<div class="os-titlebar"><button type="button" class="os-dot" data-close aria-label="Close"></button><span class="os-title" id="comp-modal-title"></span><span class="os-meta" id="comp-modal-meta"></span></div>
+		<div class="comp-modal-body" id="comp-modal-body"></div>
+	</div>
+</div>
+
+<script type="module" src="/internal/components/components.js"></script>
+	<!-- Claude panel: served by the private admin Worker, only reachable after the internal login -->
+	<script>(function(){var b=location.pathname.indexOf("/internal/")===0?"/internal/admin":"/admin";var s=document.createElement("script");s.src=b+"/docs/chat-dock.js";s.defer=true;document.head.appendChild(s);})();</script>
+</body>
+</html>
