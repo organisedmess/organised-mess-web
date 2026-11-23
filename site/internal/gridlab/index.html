@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GRIDLAB</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="stylesheet" href="./gridlab.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="wm">GRIDLAB</span><span class="sub">Organised Mess · Gridfinity for the bench</span></div>
+  <nav class="tabs" id="tabs" role="tablist" aria-label="Sections"></nav>
+  <div class="hdr-r"><button class="profile-chip" id="profileChip" type="button" aria-haspopup="dialog"><span class="dot"></span><span id="profileText">H2C · ABS-GF</span></button><a class="backlink" id="backlink" href="../" hidden>← Internal</a></div>
+</header>
+<main class="app" id="app">
+  <aside id="panel"><div class="loading">Loading the geometry engine…</div></aside>
+  <section id="stage"></section>
+</main>
+
+<dialog id="profileDlg" aria-labelledby="profileTitle">
+  <div class="dh"><b id="profileTitle">Printer and filament</b><button class="iconbtn" data-close type="button" aria-label="Close">✕</button></div>
+  <div class="db" id="profileBody"></div>
+  <div class="df"><button class="btn ghost" data-close type="button">Done</button></div>
+</dialog>
+
+<dialog id="traceDlg" aria-labelledby="traceTitle">
+  <div class="dh"><b id="traceTitle">Trace a tool from a photo</b><button class="iconbtn" data-close type="button" aria-label="Close">✕</button></div>
+  <div class="db">
+    <p class="blurb" style="margin:0">Lay the tool on white paper, shoot straight down, and crop the photo to the paper’s edges. The paper sets the scale.</p>
+    <div class="tracebox">
+      <canvas id="traceCanvas" width="600" height="420"></canvas>
+      <div>
+        <div class="row full"><input type="file" id="traceFile" accept="image/*" aria-label="Photo of the tool"></div>
+        <div class="row"><label for="tracePaper">Paper width in photo</label><select id="tracePaper"><option value="210">A4 portrait · 210</option><option value="297">A4 landscape · 297</option><option value="215.9">Letter portrait · 215.9</option><option value="279.4">Letter landscape · 279.4</option><option value="custom">Custom</option></select></div>
+        <div class="row"><label for="traceCustom">Custom width <small>mm</small></label><input type="number" id="traceCustom" value="210" step="0.5"></div>
+        <div class="row"><label for="traceThr">Threshold</label><input type="number" id="traceThr" value="0" min="0" max="255" step="1" title="0 = automatic"></div>
+        <div class="row"><label for="traceSimp">Simplify <small>mm</small></label><input type="number" id="traceSimp" value="0.6" min="0.1" max="3" step="0.1"></div>
+        <div class="row"><label for="traceInv">Light tool on dark ground</label><input type="checkbox" id="traceInv"></div>
+        <div class="hover" id="traceInfo">No photo yet.</div>
+      </div>
+    </div>
+  </div>
+  <div class="df"><button class="btn ghost" data-close type="button">Cancel</button><button class="btn" id="traceUse" type="button" disabled>Use outline</button></div>
+</dialog>
+<input type="file" id="projectFile" accept="application/json,.json" hidden>
+<input type="file" id="invFile" accept="application/json,.json" multiple hidden>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script type="module" src="./app.js"></script>
+</body>
+</html>
